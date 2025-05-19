@@ -15,11 +15,15 @@ alloc-no-stdlib = { version = "~2.0" }
 arm-gic = { version = "0.5" }
 safe-mmio = { version = "0.2.5" }
 bitfield-struct = { version = "0.10" }
+bitflags = {version = "2.9.0" }
+boot_services = { version = "15.1.0", path = "sdk/boot_services", registry = "patina-fw" }
 brotli-decompressor = { version = "4.0.0", default-features = false }
 cfg-if = { version = "1" }
 clap = { version = '4.5.36' }
 compile-time = { version = "0.2" }
 crc32fast = { version = "1.4", default-features = false }
+driver_binding = { version = "15.1.0", path = "sdk/driver_binding", registry = "patina-fw" }
+downcast-rs = { version = "1.2", default-features = false }
 fallible-streaming-iterator = { version = "0.1.9" }
 fixedbitset = { version = "^0.5", default-features = false }
 gdbstub = { version = "0.7.3", default-features = false }
@@ -29,27 +33,16 @@ lazy_static = { version = "^1" }
 linked_list_allocator = { version = "^0.10" }
 linkme = { version = "^0.3.29" }
 log = { version = "0.4", default-features = false }
-mu_rust_helpers = { version = "3.0.2" }
-num-traits = { version = "0.2", default-features = false }
-patina = { version = "14.4.2", path = "sdk/patina" }
-patina_debugger = { version = "14.4.2", path = "core/patina_debugger" }
-patina_ffs = { version = "14.4.2", path = "sdk/patina_ffs" }
-patina_ffs_extractors = { version = "14.4.2", path = "sdk/patina_ffs_extractors" }
-patina_internal_collections = { version = "14.4.2", path = "core/patina_internal_collections", default-features = false }
-patina_internal_cpu = { version = "14.4.2", path = "core/patina_internal_cpu" }
-patina_internal_depex = { version = "14.4.2", path = "core/patina_internal_depex" }
-patina_internal_device_path = { version = "14.4.2", path = "core/patina_internal_device_path" }
-patina_lzma_rs = { version = "0.3.1", default-features = false }
-patina_macro = { version = "14.4.2", path = "sdk/patina_macro" }
-patina_mtrr = { version = "^1.1.4" }
-patina_paging = { version = "10" }
-patina_performance = { version = "14.4.2", path = "components/patina_performance" }
-patina_smbios = { version = "14.4.2", path = "components/patina_smbios" }
-patina_stacktrace = { version = "14.4.2", path = "core/patina_stacktrace" }
+memoffset = {version = "0.9.1" }
+mu_pi = { version = "5.2.3" }
+mu_rust_helpers = { version = "3.0.1" }
+patina_paging = { version = "6.0.0", registry = "patina-fw" }
+patina_mtrr = { version = "1.0.0", registry = "patina-fw" }
 proc-macro2 = { version = "1" }
 quote = { version = "1" }
 r-efi = { version = "5.0.0", default-features = false }
-scroll = { version = "0.13", default-features = false, features = ["derive"]}
+runtime_services = { version = "15.1.0", path = "sdk/runtime_services", registry = "patina-fw" }
+scroll = { version = "^0.12", default-features = false, features = ["derive"] }
 spin = { version = "^0.9" }
 syn = { version = "2" }
 uart_16550 = { version = "^0.3.2" }
