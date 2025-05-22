@@ -5,5 +5,8 @@
     "check",
     "--message-format=json"
   ],
-  "rust-analyzer.cargo.targetDir": true,
+  "vscode-nmake-tools.workspaceBuildDirectories": [
+    "."
+  ],
+  "sarif-viewer.connectToGithubCodeScanning": "off"
 }
