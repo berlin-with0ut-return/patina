@@ -9,8 +9,13 @@ publish.workspace = true
 description = "UEFI Software Development Kit (SDK) that provides common types and functionality used in UEFI development."
 
 [dependencies]
-bitflags = { workspace = true }
-uefi_sdk = { workspace = true }
+log = { workspace = true }
+downcast-rs = { workspace = true }
+memoffset = { workspace = true }
+mockall = { workspace = true, optional = true }
+patina_sdk = { workspace = true }
+r-efi = { workspace = true }
+scroll = { workspace = true }
 spin = { workspace = true }
 scroll = { workspace = true }
 memoffset = { workspace = true }

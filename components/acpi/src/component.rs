@@ -1,3 +1,5 @@
+use crate::alloc::boxed::Box;
+
 use core::mem;
 use uefi_sdk::component::hob::{FromHob, Hob};
 use uefi_sdk::component::params::Commands;

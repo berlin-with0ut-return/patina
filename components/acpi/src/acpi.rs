@@ -11,8 +11,11 @@ use uefi_sdk::component::service::memory::{AllocationOptions, MemoryManager, Pag
 use uefi_sdk::component::service::{IntoService, Service};
 use uefi_sdk::efi_types::EfiMemoryType;
 
-use alloc::vec;
-use uefi_sdk::{
+use crate::alloc::{vec::Vec, boxed::Box};
+use crate::alloc::vec;
+
+use patina_sdk::boot_services::{BootServices, StandardBootServices};
+use patina_sdk::{
     base::UEFI_PAGE_SIZE,
     boot_services::{BootServices, StandardBootServices},
     uefi_size_to_pages,
