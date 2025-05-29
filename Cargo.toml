@@ -36,7 +36,12 @@ log = { version = "0.4", default-features = false }
 memoffset = {version = "0.9.1" }
 mu_pi = { version = "5.2.3" }
 mu_rust_helpers = { version = "3.0.1" }
-patina_paging = { version = "6.0.0", registry = "patina-fw" }
+patina_acpi = { version = "1.0.1", path = "components/patina_acpi", registry = "patina-fw" }
+patina_debugger = { version = "1.0.1", path = "core/patina_debugger", registry = "patina-fw" }
+patina_internal_collections = { version = "1.0.1", path = "core/patina_internal_collections", default-features = false, registry = "patina-fw" }
+patina_internal_cpu = { version = "1.0.1", path = "core/patina_internal_cpu", registry = "patina-fw" }
+patina_internal_depex = { version = "1.0.1", path = "core/patina_internal_depex", registry = "patina-fw" }
+patina_internal_device_path = { version = "1.0.1", path = "core/patina_internal_device_path", registry = "patina-fw" }
 patina_mtrr = { version = "1.0.0", registry = "patina-fw" }
 proc-macro2 = { version = "1" }
 quote = { version = "1" }
