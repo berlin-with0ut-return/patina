@@ -31,7 +31,7 @@ pub struct AcpiMemoryHob {
 }
 
 impl AcpiProviderManager {
-    fn new() -> Self {
+    pub fn new() -> Self {
         Self {}
     }
 
