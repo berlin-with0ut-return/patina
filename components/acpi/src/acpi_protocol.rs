@@ -5,6 +5,7 @@ use crate::alloc::vec;
 
 use alloc::collections::btree_map::BTreeMap;
 use core::{ffi::c_void, ptr};
+use patina_sdk::uefi_protocol::ProtocolInterface;
 use r_efi::efi;
 use spin::rwlock::RwLock;
 

@@ -1,15 +1,9 @@
-use core::ptr::NonNull;
-use core::{mem, ptr};
-
-use core::cell::OnceCell;
-use core::ptr::copy_nonoverlapping;
-use core::sync::atomic::{AtomicBool, AtomicPtr, AtomicU32, AtomicUsize, Ordering};
-use spin::rwlock::RwLock;
-use spin::Mutex;
-use uefi_sdk::component::hob::Hob;
-use uefi_sdk::component::service::memory::{AllocationOptions, MemoryManager, PageAllocation, PageAllocationStrategy};
-use uefi_sdk::component::service::{IntoService, Service};
-use uefi_sdk::efi_types::EfiMemoryType;
+use core::{
+    cell::OnceCell,
+    mem,
+    ptr::{self, copy_nonoverlapping, NonNull},
+    sync::atomic::{AtomicBool, AtomicPtr, AtomicU32, AtomicUsize, Ordering},
+};
 
 use crate::alloc::{boxed::Box, vec::Vec};
 use crate::{alloc::vec, service::AcpiNotifyFn};
@@ -17,7 +11,14 @@ use crate::{alloc::vec, service::AcpiNotifyFn};
 use patina_sdk::boot_services::{BootServices, StandardBootServices};
 use patina_sdk::{
     base::UEFI_PAGE_SIZE,
-    boot_services::{BootServices, StandardBootServices},
+    component::{
+        hob::Hob,
+        service::{
+            memory::{AllocationOptions, MemoryManager, PageAllocation, PageAllocationStrategy},
+            IntoService, Service,
+        },
+    },
+    efi_types::EfiMemoryType,
     uefi_size_to_pages,
 };
 
@@ -43,7 +44,7 @@ pub(crate) struct StandardAcpiProvider<B: BootServices + 'static> {
     next_table_key: AtomicUsize,
     notify_list: RwLock<Vec<AcpiNotifyFn>>,
     pub(crate) boot_services: OnceCell<B>,
-    memory_manager: OnceCell<Service<dyn MemoryManager>>,
+    pub(crate) memory_manager: OnceCell<Service<dyn MemoryManager>>,
     entries: RwLock<Vec<u64>>,
     max_entries: AtomicUsize,
 }
@@ -355,7 +356,7 @@ where
         signature: u32,
         table_addr: Option<usize>,
         is_from_hob: bool,
-        npages: usize,
+        n_pages: usize,
     ) -> Result<usize, AcpiError> {
         // If the table is from the HOB, it should already be installed in ACPI memory
         if is_from_hob {
@@ -389,7 +390,7 @@ where
             .memory_manager
             .get()
             .expect("Memory manager not initialized")
-            .allocate_zero_pages(npages, alloc_options)
+            .allocate_zero_pages(n_pages, alloc_options)
             .map_err(|_e| AcpiError::AllocationFailed)?;
 
         Ok(page_alloc.into_raw_ptr::<u8>() as usize)
@@ -719,8 +720,6 @@ where
                 xsdt.length as usize,
                 memoffset::offset_of!(AcpiTable, checksum),
             );
-
-            xsdt.length -= mem::size_of::<u64>() as u32;
         }
     }
 
@@ -797,11 +796,11 @@ mod tests {
     extern crate std;
 
     use super::*;
+    use patina_sdk::boot_services::MockBootServices;
+    use patina_sdk::component::service::memory::MockMemoryManager;
+    use patina_sdk::component::service::memory::StdMemoryManager;
     use std::boxed::Box;
     use std::ptr;
-    use uefi_sdk::boot_services::MockBootServices;
-    use uefi_sdk::component::service::memory::MockMemoryManager;
-    use uefi_sdk::component::service::memory::StdMemoryManager;
 
     #[test]
     fn test_get_table() {
@@ -809,7 +808,7 @@ mod tests {
         provider.initialize(2, true, MockBootServices::new(), Service::mock(Box::new(MockMemoryManager::new())));
 
         // Dummy AcpiTable (on heap, not actually in ACPI memory)
-        let mut table = Box::new(AcpiTable { signature: 0x1111, length: 123, ..Default::default() });
+        let table = Box::new(AcpiTable { signature: 0x1111, length: 123, ..Default::default() });
         let table_ptr = NonNull::new(Box::into_raw(table)).unwrap();
 
         provider.acpi_tables.write().push(table_ptr);
@@ -878,12 +877,6 @@ mod tests {
         assert_eq!(result[0].length, 10);
         assert_eq!(result[1].signature, 0x2);
         assert_eq!(result[1].length, 20);
-
-        // Drop heap memory
-        unsafe {
-            Box::from_raw(ptr1.as_ptr());
-            Box::from_raw(ptr2.as_ptr());
-        }
     }
 
     #[test]
@@ -927,7 +920,7 @@ mod tests {
             Box::new(AcpiFadt { signature: signature::FACP, length: 244, x_firmware_ctrl: 0, ..Default::default() });
         let fadt_ptr = Box::into_raw(fadt);
         {
-            let mut sys = provider.system_tables.lock();
+            let sys = provider.system_tables.lock();
             sys.fadt.store(fadt_ptr, Ordering::Release);
         }
 
@@ -939,12 +932,6 @@ mod tests {
         unsafe {
             let fadt_ref: &AcpiFadt = &*fadt_ptr;
             assert_eq!(fadt_ref.get_x_firmware_ctrl(), facs_ptr as u64);
-        }
-
-        // Drop heap memory
-        unsafe {
-            Box::from_raw(fadt_ptr);
-            Box::from_raw(facs_ptr as *mut AcpiFacs);
         }
     }
 
@@ -1018,8 +1005,8 @@ mod tests {
             length: ACPI_HEADER_LEN as u32, // XSDT currently has no entries
             revision: 1,
             checksum: 0,
-            oem_id: *b"OEMID ",
-            oem_table_id: *b"TABLEID ",
+            oem_id: *b"123456",
+            oem_table_id: *b"12345678",
             oem_revision: 1,
             creator_id: 0,
             creator_revision: 0,
@@ -1085,7 +1072,7 @@ mod tests {
         provider.initialize(2, true, MockBootServices::new(), Service::mock(Box::new(StdMemoryManager::new())));
 
         // Create a dummy XSDT and add it to system tables
-        let mut xsdt_table = AcpiXsdt {
+        let xsdt_table = AcpiXsdt {
             signature: signature::XSDT,
             // The XSDT is currently "full"
             length: (ACPI_HEADER_LEN + mem::size_of::<u64>() * MAX_INITIAL_ENTRIES) as u32,
@@ -1106,8 +1093,6 @@ mod tests {
             .allocate_zero_pages(uefi_size_to_pages!(xsdt_table.length as usize), AllocationOptions::new())
             .unwrap();
         let old_ptr = page_alloc.into_raw_ptr::<u8>();
-        let total_bytes = xsdt_table.length as usize;
-        let mut old_buf = vec![0u8; total_bytes].into_boxed_slice();
         let xsdt_ptr = old_ptr as *mut AcpiXsdt;
         unsafe {
             ptr::write(xsdt_ptr, xsdt_table);
@@ -1140,21 +1125,22 @@ mod tests {
         fadt.x_firmware_ctrl = 0xdead;
         let fadt_ptr = Box::into_raw(fadt);
         {
-            let mut st = provider.system_tables.lock();
+            let st = provider.system_tables.lock();
             st.fadt.store(fadt_ptr, Ordering::Release);
         }
 
         // Dummy DSDT pointed to by FADT
-        let mut real_dsdt = Box::new(AcpiDsdt { signature: signature::DSDT, ..Default::default() });
+        let real_dsdt = Box::new(AcpiDsdt { signature: signature::DSDT, ..Default::default() });
         let dsdt_ptr = Box::into_raw(real_dsdt);
         // Cast and store as AcpiTable pointer
         {
-            let mut st = provider.system_tables.lock();
+            let st = provider.system_tables.lock();
             st.dsdt.store(dsdt_ptr, Ordering::Release);
         }
 
         let table_ref: &mut AcpiTable = unsafe { &mut *(dsdt_ptr as *mut AcpiTable) };
         let result = provider.delete_table(table_ref);
+        assert!(result.is_ok());
 
         // Should have cleared DSDT pointer
         let dsdt_cleared = provider.system_tables.lock().dsdt.load(Ordering::Acquire);
