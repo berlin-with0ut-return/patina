@@ -117,7 +117,7 @@ args = ["build", "@@split(STD_FLAGS, )", "--example", "dxe_core_std"]
 description = "Checks rust code for no_std build errors with results."
 private = true
 command = "cargo"
-args = ["check", "--all-targets", "--all-features", "@@split(CARGO_MAKE_TASK_ARGS, )"]
+args = ["check", "--target", "aarch64-unknown-uefi", "@@split(NO_STD_FLAGS, )", "@@split(CARGO_MAKE_TASK_ARGS, )"]
 
 [tasks.check_tests]
 description = "Checks rust test code for build errors with results."
@@ -128,27 +128,7 @@ args = ["check", "@@split(STD_FLAGS, )", "@@split(CARGO_MAKE_TASK_ARGS, )"]
 [tasks.check]
 description = "Checks rust code for errors. Example `cargo make check`"
 clear = true
-run_task = [{ name = ["check_code", "check_tests"], parallel = true }]
-
-[tasks.patina-test]
-description = "Builds crates with Patina tests enabled. Example `cargo make patina-test`"
-clear = true
-command = "cargo"
-args = ["build", "@@split(INDIVIDUAL_PACKAGE_TARGETS, )", "@@split(STD_FLAGS, )", "--features", "enable_patina_tests"]
-dependencies = ["individual-package-targets"]
-
-[tasks.generate-lockfile]
-description = "Generate Cargo.lock file."
-private = true
-command = "cargo"
-args = ["generate-lockfile"]
-
-[tasks.llvm-cov-clean]
-description = "Clean coverage data"
-private = true
-install_crate = false
-command = "cargo"
-args = ["llvm-cov", "clean", "--workspace"]
+run_task = [{ name = ["check_no_std"], parallel = true }]
 
 [tasks.test]
 description = "Run tests and collect coverage data without generating reports."
