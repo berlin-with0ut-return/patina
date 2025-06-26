@@ -128,7 +128,7 @@ args = ["check", "--tests", "@@split(STD_FLAGS, )", "@@split(CARGO_MAKE_TASK_ARG
 [tasks.check]
 description = "Checks rust code for errors. Example `cargo make check`"
 clear = true
-run_task = [{ name = ["check_no_std"], parallel = true }]
+run_task = [{ name = ["check_no_std", "check_std"], parallel = true }]
 
 [tasks.test]
 description = "Run tests and collect coverage data without generating reports."
