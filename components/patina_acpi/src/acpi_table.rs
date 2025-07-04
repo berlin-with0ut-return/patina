@@ -303,6 +303,41 @@ pub struct AcpiTableHeader {
     pub creator_revision: u32,
 }
 
+impl AcpiTableHeader {
+    /// Serialize `self` into a `Vec<u8>` in ACPI's canonical layout.
+    pub fn hdr_to_bytes(&self) -> Vec<u8> {
+        // Pre‑allocate exactly the right length
+        let mut buf = Vec::with_capacity(mem::size_of::<Self>());
+
+        // Signature (4 bytes)
+        buf.extend_from_slice(&self.signature.to_le_bytes());
+
+        // Length (4 bytes, little‑endian)
+        buf.extend_from_slice(&self.length.to_le_bytes());
+
+        // Revision (1 byte), Checksum (1 byte)
+        buf.push(self.revision);
+        buf.push(self.checksum);
+
+        // OEM ID (6 bytes)
+        buf.extend_from_slice(&self.oem_id);
+
+        // OEM Table ID (8 bytes)
+        buf.extend_from_slice(&self.oem_table_id);
+
+        // OEM Revision (4 bytes, little‑endian)
+        buf.extend_from_slice(&self.oem_revision.to_le_bytes());
+
+        // Creator ID (4 bytes, little‑endian)
+        buf.extend_from_slice(&self.creator_id.to_le_bytes());
+
+        // Creator Revision (4 bytes, little‑endian)
+        buf.extend_from_slice(&self.creator_revision.to_le_bytes());
+
+        buf
+    }
+}
+
 /// The inner table structure.
 pub(crate) union Table<T = AcpiTableHeader> {
     /// The signature of the ACPI table.
