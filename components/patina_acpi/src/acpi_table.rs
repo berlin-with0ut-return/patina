@@ -401,8 +401,34 @@ impl AcpiTable {
         unsafe { &mut self.table.as_mut().header }
     }
 
-    pub fn update_checksum(&mut self, offset: usize) {
-        todo!()
+    /// Returns a raw byte slice over the entire table.
+    /// SAFETY: self.length must accurately reflect the allocated size of the table.
+    pub fn as_bytes(&self) -> &[u8] {
+        unsafe { slice::from_raw_parts(self.table.as_ptr() as *const u8, self.header().length as usize) }
+    }
+
+    /// Returns a mutable byte slice over the entire table.
+    /// (This is primarily useful for computing the checksum.)
+    /// SAFETY: self.length must accurately reflect the allocated size of the table.
+    pub fn as_bytes_mut(&mut self) -> &mut [u8] {
+        unsafe { slice::from_raw_parts_mut(self.table.as_ptr() as *mut u8, self.header().length as usize) }
+    }
+
+    pub fn update_checksum(&mut self, offset: usize) -> Result<(), AcpiError> {
+        let bytes = self.as_bytes_mut();
+        let len = bytes.len();
+
+        // Set the checksum field (byte at the specified `offset`) to zero before recalculation.
+        if len > offset {
+            bytes[offset] = 0;
+
+            // Recalculate checksum and set so that total sum is 0.
+            let sum: u8 = bytes.iter().fold(0u8, |sum, &b| sum.wrapping_add(b));
+            bytes[offset] = (0u8).wrapping_sub(sum);
+            Ok(())
+        } else {
+            Err(AcpiError::InvalidChecksumOffset)
+        }
     }
 
     /// Returns a reference to the entire AcpiTable.
@@ -433,5 +459,61 @@ impl AcpiTable {
     /// Returns a mutable pointer the the underlying AcpiTable.
     pub fn as_mut_ptr(&self) -> *mut AcpiTableHeader {
         self.table.as_ptr() as *mut AcpiTableHeader
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use crate::signature::ACPI_CHECKSUM_OFFSET;
+
+    use super::*;
+    use core::mem;
+    use core::ptr::NonNull;
+
+    #[repr(C)]
+    struct TestTable {
+        header: AcpiTableHeader,
+        body: [u8; 3],
+    }
+
+    const TEST_SIGNATURE: u32 = 0x123;
+
+    #[test]
+    fn test_update_checksum_on_real_acpi_table() {
+        // Build a mock table.
+        let test_table = TestTable {
+            header: AcpiTableHeader {
+                signature: TEST_SIGNATURE,
+                length: (mem::size_of::<TestTable>()) as u32,
+                revision: 1,
+                checksum: 0, // we'll fill this
+                oem_id: *b"OEM_ID!",
+                oem_table_id: *b"TBL_ID__",
+                oem_revision: 0xAABBCCDD,
+                creator_id: 0x11223344,
+                creator_revision: 0x55667788,
+            },
+            body: [10, 20, 30], // some payload bytes
+        };
+
+        // Set up the test table.
+        let table_union: Table<TestTable> = unsafe { Table::new(test_table) };
+        // Box it on the heap (uses the global allocator).
+        let boxed: Box<Table<TestTable>> = Box::new(table_union);
+        let raw_ptr: *mut Table<TestTable> = Box::into_raw(boxed);
+        let nn = unsafe { NonNull::new_unchecked(raw_ptr as *mut Table) };
+
+        // Wrap in AcpiTable.
+        let mut acpi_table = AcpiTable { table: nn };
+
+        // Update the checksum (use standard checksum offset since it has a standard header).
+        let offset = ACPI_CHECKSUM_OFFSET;
+        assert!(acpi_table.update_checksum(offset).is_ok());
+
+        // Pull out the bytes and verify the checksum.
+        let bytes: &[u8] = acpi_table.as_bytes();
+        // Total sum must be zero mod 256.
+        let total: u8 = bytes.iter().copied().fold(0u8, |acc, b| acc.wrapping_add(b));
+        assert_eq!(total, 0, "entire table did not sum to zero");
     }
 }
