@@ -17,10 +17,12 @@ use patina_sdk::component::service::{IntoService, Service};
 use crate::acpi_table::{AcpiFacs, AcpiTable, AcpiTableHeader, StandardAcpiTable};
 use crate::error::AcpiError;
 
+/// Represents an opaque reference to an installed ACPI table.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord)]
 pub struct TableKey(pub(crate) usize);
 
-pub type AcpiNotifyFn = fn(&AcpiTableHeader, u32, TableKey) -> Result<(), AcpiError>;
+/// A notification function that is called when a new ACPI table is installed.
+pub type AcpiNotifyFn = fn(&AcpiTableHeader, u32, usize) -> efi::Status;
 
 /// The `AcpiTableManager` provides an interface for installing, uninstalling, and accessing ACPI tables.
 /// This struct serves as the API by which external components can access ACPI services.
@@ -48,7 +50,7 @@ impl AcpiTableManager {
     ///
     /// ## SAFETY
     /// - Caller must ensure the provided table, `T`, has a C compatible layout (typically using `#[repr(C)]`).
-    /// - Caller must ensure that the table's first field is [AcpiTableHeader].
+    /// - Caller must ensure that the table's first field is a standard ACPI table header.
     pub unsafe fn install_acpi_table<T>(&self, table: &T) -> Result<TableKey, AcpiError> {
         let acpi_table = unsafe { AcpiTable::new(table, &self.memory_manager) };
         self.provider_service.install_acpi_table(acpi_table)
@@ -97,12 +99,12 @@ impl AcpiTableManager {
         self.provider_service.register_notify(should_register, notify_fn)
     }
 
-    // / Returns an iterator over the installed ACPI tables.
-    // / Each returned `AcpiTableHeader` points to the header of an ACPI table installed in ACPI memory.
-    // /
-    // / This can be used in place of `get_acpi_table`, or in conjunction with it to retrieve a specific table reference.
-    // /
-    // / The RSDP and XSDT are not included in the list of iterable ACPI tables.
+    /// Returns an iterator over the installed ACPI tables.
+    /// Each returned `AcpiTableHeader` points to the header of an ACPI table installed in ACPI memory.
+    ///
+    /// This can be used in place of `get_acpi_table`, or in conjunction with it to retrieve a specific table reference.
+    ///
+    /// The RSDP and XSDT are not included in the list of iterable ACPI tables.
     pub fn iter_tables(&self) -> Vec<AcpiTable> {
         self.provider_service.iter_tables()
     }
