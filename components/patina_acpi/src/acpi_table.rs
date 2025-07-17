@@ -11,16 +11,16 @@
 //! SPDX-License-Identifier: BSD-2-Clause-Patent
 
 use alloc::boxed::Box;
-use downcast_rs::{impl_downcast, Downcast};
-use patina_sdk::component::service::memory::MemoryManager;
+use alloc::vec::Vec;
 use patina_sdk::component::service::Service;
+use patina_sdk::component::service::memory::MemoryManager;
 use patina_sdk::efi_types::EfiMemoryType;
 
 use crate::error::AcpiError;
 use crate::signature::ACPI_XSDT_ENTRY_SIZE;
 use crate::{service::TableKey, signature::ACPI_HEADER_LEN};
 
-use core::any::{Any, TypeId};
+use core::any::TypeId;
 use core::mem::ManuallyDrop;
 use core::ptr::{self, NonNull};
 use core::{mem, slice};
@@ -54,7 +54,7 @@ impl_downcast!(StandardAcpiTable);
 /// Represents the FADT for ACPI 2.0+.
 /// Equivalent to EFI_ACPI_3_0_FIXED_ACPI_DESCRIPTION_TABLE.
 #[repr(C)]
-#[derive(Default, Clone, Copy)]
+#[derive(Default, Clone, Copy, Debug)]
 pub(crate) struct AcpiFadt {
     // Standard ACPI header.
     pub(crate) header: AcpiTableHeader,
@@ -62,7 +62,7 @@ pub(crate) struct AcpiFadt {
 }
 
 #[repr(C, packed)]
-#[derive(Default, Clone, Copy)]
+#[derive(Default, Clone, Copy, Debug)]
 pub(crate) struct FadtData {
     pub(crate) _firmware_ctrl: u32,
     pub(crate) _dsdt: u32,
@@ -351,7 +351,7 @@ pub(crate) union Table<T = AcpiTableHeader> {
     /// The header of the ACPI table.
     header: AcpiTableHeader,
     /// The full ACPI table, represented as its original type.
-    inner: ManuallyDrop<T>,
+    pub(crate) inner: ManuallyDrop<T>,
 }
 
 impl<T> Table<T> {
@@ -359,20 +359,26 @@ impl<T> Table<T> {
     ///
     /// ## Safety
     ///
-    /// - Caller must ensure the provided table, `T`, has a C compatible layout (typically using `#[repr(C)]`).
+    /// - Caller must ensure the provided table, `T`, a C compatible layout (typically using `#[repr(C)]`).
     /// - Caller must ensure that the table's first field is [AcpiTableHeader].
     pub unsafe fn new(table: T) -> Result<Self, AcpiError> {
+        log::info!("it's all bad");
         let returned_table = Table { inner: ManuallyDrop::new(table) };
 
         // Make sure all bytes are valid ASCII.
         // By spec, ACPI table signatures are length-4 ASCII strings (represented numerically as u32's).
+        log::info!("Signature: {:x}", returned_table.signature());
         let is_valid_ascii = returned_table.signature().to_le_bytes().iter().all(|b| b.is_ascii());
         if !is_valid_ascii {
+            log::info!("naur");
             return Err(AcpiError::InvalidTableFormat);
         }
 
         // Make sure length is valid for type T.
-        if (returned_table.header.length as usize) < mem::size_of::<T>() {
+        // SAFETY: If function preconditions are met, the header is valid and has a valid length.
+        log::info!("FADT length: {}", returned_table.header.length);
+        log::info!("Size of T: {}", mem::size_of::<T>());
+        if (unsafe { returned_table.header.length } as usize) < mem::size_of::<T>() {
             return Err(AcpiError::InvalidTableFormat);
         }
 
@@ -401,6 +407,7 @@ impl<T> Table<T> {
 #[derive(Clone, Copy)]
 pub(crate) struct AcpiTable {
     pub(crate) table: NonNull<Table>,
+    pub(crate) type_id: core::any::TypeId,
 }
 
 impl AcpiTable {
@@ -416,8 +423,10 @@ impl AcpiTable {
     ///
     /// - Caller must ensure the provided table, `T`, has a C compatible layout (typically using `#[repr(C)]`).
     /// - Caller must ensure that the table's first field is [AcpiTableHeader].
-    pub unsafe fn new<T>(table: T, mm: &Service<dyn MemoryManager>) -> Result<Self, AcpiError> {
-        let table = Table::new(table)?;
+    pub unsafe fn new<T: 'static>(table: T, mm: &Service<dyn MemoryManager>) -> Result<Self, AcpiError> {
+        log::info!("it's joever3");
+        // SAFETY: If the caller preconditions are met, the signature, header, and table fields of the union are valid.
+        let table = unsafe { Table::new(table) }?;
 
         // FACS and UEFI tables must always be located in NVS (by spec).
         let allocator_type = match table.signature() {
@@ -431,7 +440,10 @@ impl AcpiTable {
         )))
         .cast::<Table>();
 
-        Ok(AcpiTable { table })
+        // Store the type ID for convenience.
+        let type_id = core::any::TypeId::of::<T>();
+
+        Ok(AcpiTable { table, type_id })
     }
 
     /// Creates a new AcpiTable from a raw pointer.
@@ -445,8 +457,13 @@ impl AcpiTable {
         header_ptr: *const AcpiTableHeader,
         mm: &Service<dyn MemoryManager>,
     ) -> Result<Self, AcpiError> {
-        let table_signature = (*header_ptr).signature;
-        let table_length = (*header_ptr).length as usize;
+        // SAFETY: If function preconditions are met, the pointer is valid and points to a valid ACPI table header.
+        let table_signature;
+        let table_length;
+        unsafe {
+            table_signature = (*header_ptr).signature;
+            table_length = (*header_ptr).length as usize;
+        }
 
         let allocator_type = match table_signature {
             signature::FACS | signature::UEFI => EfiMemoryType::ACPIMemoryNVS,
@@ -458,13 +475,21 @@ impl AcpiTable {
         let mut table_bytes = Vec::with_capacity_in(table_length, allocator);
 
         // Copy entire table into the new allocation.
-        ptr::copy_nonoverlapping(header_ptr as *const u8, table_bytes.as_mut_ptr(), table_length);
-        table_bytes.set_len(table_length);
+        // SAFETY: If function preconditions are met, the pointer is valid and points to a valid ACPI table header.
+        // SAFETY: If function preconditions are met, the table length is guaranteed to be correct.
+        // SAFETY: If allocation succeeds, `table_bytes` is guaranteed to be valid and have enough space.
+        unsafe {
+            ptr::copy_nonoverlapping(header_ptr as *const u8, table_bytes.as_mut_ptr(), table_length);
+            table_bytes.set_len(table_length);
+        }
 
         // Leak the allocated bytes.
         let raw_header = Box::into_raw(table_bytes.into_boxed_slice()) as *mut AcpiTableHeader;
 
-        Ok(Self { table: NonNull::new(raw_header).ok_or(AcpiError::NullTablePtr)?.cast::<Table>() })
+        Ok(Self {
+            table: NonNull::new(raw_header).ok_or(AcpiError::NullTablePtr)?.cast::<Table>(),
+            type_id: TypeId::of::<AcpiTableHeader>(), // Unknown type, so we use the header type.
+        })
     }
 
     /// Creates a new ACPI table from a boxed Table (already allocated).
@@ -603,7 +628,7 @@ mod tests {
         let nn = unsafe { NonNull::new_unchecked(raw_ptr as *mut Table) };
 
         // Wrap in AcpiTable.
-        let mut acpi_table = AcpiTable { table: nn };
+        let mut acpi_table = AcpiTable { table: nn, type_id: TypeId::of::<TestTable>() };
 
         // Update the checksum (use standard checksum offset since it has a standard header).
         let offset = ACPI_CHECKSUM_OFFSET;
