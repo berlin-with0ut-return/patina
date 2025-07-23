@@ -205,7 +205,7 @@ impl StandardAcpiTable for AcpiDsdt {
 pub struct AcpiRsdp {
     pub(crate) signature: u64,
 
-    pub(crate) _checksum: u8,
+    pub(crate) checksum: u8,
 
     pub(crate) oem_id: [u8; 6],
     pub(crate) revision: u8,
