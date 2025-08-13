@@ -89,7 +89,7 @@ use patina::{
 use patina_ffs::section::SectionExtractor;
 use patina_internal_cpu::{cpu::EfiCpu, interrupts::Interrupts};
 use protocols::PROTOCOL_DB;
-use r_efi::efi::{self};
+use r_efi::efi;
 
 use crate::config_tables::memory_attributes_table;
 
