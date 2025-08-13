@@ -360,6 +360,10 @@ where
         // If not, it will be updated when the FACS is installed.
         if let Some(facs) = self.acpi_tables.read().get(&Self::FACS_KEY) {
             unsafe { fadt_info.as_mut::<AcpiFadt>() }.inner.x_firmware_ctrl = facs.as_ptr() as u64;
+            // Set the 32-bit pointer to the FACS. (This is an ACPI 1.0 legacy field.)
+            // Ideally this would not be necessary, but the current Windows OS implementation relies on this field.
+            // This workaround can be removed when Windows no longer relies on these fields.
+            unsafe { fadt_info.as_mut::<AcpiFadt>() }.inner._firmware_ctrl = facs.as_ptr() as u32;
         }
 
         // If the DSDT is already installed, update the FACP's x_dsdt field.
@@ -642,14 +646,9 @@ where
 
     /// Publishes ACPI tables after installation.
     pub(crate) fn publish_tables(&self) -> Result<(), AcpiError> {
-        log::info!("tyna system table");
-
         if let Some(rsdp_table) = self.acpi_tables.write().get_mut(&Self::RSDP_KEY) {
             // Cast RSDP to raw pointer for boot services.
             let rsdp_ptr = rsdp_table.as_mut_ptr() as *mut c_void;
-
-            log::info!("installing system table");
-
             unsafe {
                 self.boot_services
                     .get()
