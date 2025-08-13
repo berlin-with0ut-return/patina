@@ -11,14 +11,12 @@
 use crate::acpi_table::{AcpiTable, AcpiTableHeader};
 use crate::signature::{self, ACPI_VERSIONS_GTE_2};
 
-use alloc::collections::btree_map::BTreeMap;
 use core::ffi::c_void;
 use core::mem;
 use patina_sdk::uefi_protocol::ProtocolInterface;
 use r_efi::efi;
-use spin::rwlock::RwLock;
 
-use crate::acpi::{self, ACPI_TABLE_INFO};
+use crate::acpi::ACPI_TABLE_INFO;
 use crate::service::{AcpiNotifyFn, AcpiProvider, TableKey};
 use crate::{
     acpi::ACPI_TABLE_INFO,

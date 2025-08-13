@@ -65,7 +65,7 @@ mod tpl_lock;
 #[coverage(off)]
 pub mod test_support;
 
-use core::{ffi::c_void, ptr, slice, str::FromStr};
+use core::{ffi::c_void, ptr, str::FromStr};
 
 use alloc::{boxed::Box, vec::Vec};
 use gcd::SpinLockedGcd;
@@ -89,7 +89,7 @@ use patina::{
 use patina_ffs::section::SectionExtractor;
 use patina_internal_cpu::{cpu::EfiCpu, interrupts::Interrupts};
 use protocols::PROTOCOL_DB;
-use r_efi::efi::{self, ConfigurationTable};
+use r_efi::efi::{self};
 
 use crate::config_tables::memory_attributes_table;
 
