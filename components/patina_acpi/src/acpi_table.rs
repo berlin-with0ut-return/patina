@@ -459,13 +459,30 @@ impl AcpiTable {
             table_length = (*header_ptr).length as usize;
         }
 
-        let allocator_type = match table_signature {
-            signature::FACS | signature::UEFI => EfiMemoryType::ACPIMemoryNVS,
-            _ => EfiMemoryType::ACPIReclaimMemory,
-        };
+        // The current Windows implementation uses the legacy 32-bit FACS pointer in the FADT.
+        // As such, the FACS must be allocated in the lower 32-bit address space.
+        // This workaround can be removed when Windows no longer relies on this field.
+        // The FACS is always allocated in NVS memory.
+        if table_signature == signature::FACS {
+            let facs_alloc = mm
+                .allocate_pages(
+                    1,
+                    AllocationOptions::new()
+                        .with_memory_type(EfiMemoryType::ACPIMemoryNVS)
+                        .with_strategy(PageAllocationStrategy::MaxAddress(0x1000_0000)),
+                )
+                .map_err(|_e| AcpiError::AllocationFailed)?;
+            let new_facs_ptr = facs_alloc.into_raw_ptr().unwrap();
+            unsafe { ptr::copy_nonoverlapping(header_ptr as *const u8, new_facs_ptr, table_length) };
+
+            return Ok(Self {
+                table: NonNull::new(new_facs_ptr).ok_or(AcpiError::NullTablePtr)?.cast::<Table>(),
+                type_id: TypeId::of::<AcpiFacs>(),
+            });
+        }
 
         // Allocate table based on the length given in the header field.
-        let allocator = mm.get_allocator(allocator_type).map_err(|_e| AcpiError::AllocationFailed)?;
+        let allocator = mm.get_allocator(EfiMemoryType::ACPIReclaimMemory).map_err(|_e| AcpiError::AllocationFailed)?;
         let mut table_bytes = Vec::with_capacity_in(table_length, allocator);
 
         // Copy entire table into the new allocation.
