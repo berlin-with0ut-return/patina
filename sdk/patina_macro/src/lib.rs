@@ -7,8 +7,6 @@
 //! SPDX-License-Identifier: Apache-2.0
 //!
 
-#![feature(coverage_attribute)]
-
 mod component_macro;
 mod hob_macro;
 mod service_macro;

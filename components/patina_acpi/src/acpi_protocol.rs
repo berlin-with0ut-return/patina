@@ -212,7 +212,10 @@ impl AcpiSdtProtocol {
                 unsafe { *table = sdt_ptr };
                 efi::Status::SUCCESS
             }
-            Err(e) => e.into(),
+            Err(e) => {
+                log::info!("get_acpi_table from ACPI protocol failed with error {:?}", e);
+                e.into()
+            }
         }
     }
 
