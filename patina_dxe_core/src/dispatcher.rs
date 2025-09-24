@@ -12,8 +12,15 @@ use alloc::{
     vec::Vec,
 };
 use core::{cmp::Ordering, ffi::c_void};
+use mu_pi::{fw_fs::ffs, protocols::firmware_volume_block};
 use mu_rust_helpers::{function, guid::guid_fmt};
-use patina::{
+use patina_ffs::{
+    section::{Section, SectionExtractor},
+    volume::VolumeRef,
+};
+use patina_internal_depex::{AssociatedDependency, Depex, Opcode};
+use patina_internal_device_path::concat_device_path_to_boxed_slice;
+use patina_sdk::{
     component::service::Service,
     error::EfiError,
     performance::{
@@ -551,6 +558,27 @@ mod tests {
 
     use super::*;
     use crate::{test_collateral, test_support};
+
+    // Simple logger for log crate to dump stuff in tests
+    struct SimpleLogger;
+    impl log::Log for SimpleLogger {
+        fn enabled(&self, metadata: &Metadata) -> bool {
+            metadata.level() <= Level::Info
+        }
+
+        fn log(&self, record: &Record) {
+            if self.enabled(record.metadata()) {
+                println!("{}", record.args());
+            }
+        }
+
+        fn flush(&self) {}
+    }
+    static LOGGER: SimpleLogger = SimpleLogger;
+
+    fn set_logger() {
+        let _ = log::set_logger(&LOGGER).map(|()| log::set_max_level(LevelFilter::Info));
+    }
 
     // Simple logger for log crate to dump stuff in tests
     struct SimpleLogger;

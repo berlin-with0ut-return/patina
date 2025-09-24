@@ -487,7 +487,7 @@ fn get_module_guid_from_handle(
             break 'find_loaded_image_protocol Some(loaded_image_protocol);
         }
 
-        // SAFETY: `driver_binding_protocol` is the only reference to the `driver_binding::Protocol` in this scope.
+        // SAFETY: This is safe because the protocol is not mutated.
         unsafe {
             if let Ok(driver_binding_protocol) = boot_services
                 .open_protocol::<efi::protocols::driver_binding::Protocol>(
@@ -511,24 +511,8 @@ fn get_module_guid_from_handle(
             && file_path.r#type == TYPE_MEDIA
             && file_path.sub_type == Media::SUBTYPE_PIWG_FIRMWARE_FILE
         {
-            // The layout of MEDIA_FW_VOL_FILEPATH_DEVICE_PATH in memory is { Protocol (header) | Guid (file name) }.
-            let node_len = u16::from_le_bytes(file_path.length);
-            let expected_len =
-                (mem::size_of::<efi::protocols::device_path::Protocol>() + mem::size_of::<efi::Guid>()) as u16;
-
-            // Sanity check that the header matches the expected size.
-            if node_len != expected_len {
-                return Err(efi::Status::NOT_FOUND);
-            }
-
-            // SAFETY: To be honest there is no way to guarantee the memory read here is valid and owned by us,
-            // but we have at least validated that the type gives a known layout and the layout of the device path matches its claimed length.
-            unsafe {
-                let guid_ptr = (loaded_image.file_path as *const u8)
-                    .add(mem::size_of::<efi::protocols::device_path::Protocol>())
-                    as *const efi::Guid;
-                guid = ptr::read(guid_ptr);
-            }
+            // Guid is stored after the device path in memory.
+            guid = unsafe { ptr::read(loaded_image.file_path.add(1) as *const efi::Guid) }
         };
     }
 

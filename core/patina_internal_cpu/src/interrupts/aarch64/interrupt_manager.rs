@@ -67,24 +67,14 @@ impl InterruptsAarch64 {
 impl InterruptManager for InterruptsAarch64 {}
 
 fn enable_fiq() {
-    #[cfg(all(not(test), target_arch = "aarch64"))]
-    {
-        write_sysreg!(reg daifclr, imm 0x01, "isb sy");
-    }
-    #[cfg(not(target_arch = "aarch64"))]
-    {
-        unimplemented!()
+    unsafe {
+        asm!("msr   daifclr, 0x01", "isb sy", options(nostack));
     }
 }
 
 fn disable_fiq() {
-    #[cfg(all(not(test), target_arch = "aarch64"))]
-    {
-        write_sysreg!(reg daifset, imm 0x01, "isb sy");
-    }
-    #[cfg(not(target_arch = "aarch64"))]
-    {
-        unimplemented!()
+    unsafe {
+        asm!("msr   daifset, 0x01", "isb sy", options(nostack));
     }
 }
 
@@ -103,7 +93,9 @@ fn get_fiq_state() -> Result<bool, EfiError> {
 fn enable_async_abort() {
     #[cfg(all(not(test), target_arch = "aarch64"))]
     {
-        write_sysreg!(reg daifclr, imm 0x04, "isb sy");
+        unsafe {
+            asm!("msr   daifclr, 0x04", "isb sy", options(nostack));
+        }
     }
     #[cfg(not(target_arch = "aarch64"))]
     {
@@ -132,8 +124,9 @@ fn initialize_exception() -> Result<(), EfiError> {
         let vec_base = unsafe { &exception_handlers_start as *const _ as u64 };
         let current_el = get_current_el();
         match current_el {
-            0xC => write_sysreg!(reg vbar_el1, vec_base, "isb sy"),
-            0x08 => write_sysreg!(reg vbar_el2, vec_base, "isb sy"),
+            0xC => unsafe { write_sysreg!(vbar_el1, vec_base, "isb sy") },
+            0x08 => unsafe { write_sysreg!(vbar_el2, vec_base, "isb sy") },
+            0x04 => unsafe { write_sysreg!(vbar_el3, vec_base, "isb sy") },
             _ => panic!("Invalid current EL {}", current_el),
         };
     }

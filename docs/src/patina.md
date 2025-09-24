@@ -220,8 +220,25 @@ implemented the ability for the Patina DXE Core dispatch process to dispatch pla
 and services with each other but through Rust interfaces that are safe and statically checked versus the dynamic and
 disjoint nature of the protocol database in the C DXE Core.
 
-For an example of how the Patina DXE Core is instantiated and customized in a platform binary, see the
-[Patina DXE Core Integration Guide](integrate/dxe_core.md).
+This snippet shows a simple example of how the Patina DXE Core is instantiated and customized in a simple platform
+binary crate:
+
+```rust
+#[cfg_attr(target_os = "uefi", export_name = "efi_main")]
+pub extern "efiapi" fn _start(physical_hob_list: *const c_void) -> ! {
+    log::set_logger(&LOGGER).map(|()| log::set_max_level(log::LevelFilter::Trace)).unwrap();
+    let adv_logger_component = AdvancedLoggerComponent::<Uart16550>::new(&LOGGER);
+    adv_logger_component.init_advanced_logger(physical_hob_list).unwrap();
+
+    patina_debugger::set_debugger(&DEBUGGER);
+
+    Core::default()
+        .with_section_extractor(patina_ffs_extractors::CompositeSectionExtractor::default()) // Section extractor can be customized or use default
+        .init_memory(physical_hob_list)                                                  // DXE Core initializes GCD with the HOB list
+        .with_component(adv_logger_component)                                            // The "advanced logger" Rust component is added for dispatch
+        .start()
+        .unwrap();
+```
 
 ``` admonish note
 Rust is an exciting new next step and there is more to share about the Patina DXE Core in future documentation.

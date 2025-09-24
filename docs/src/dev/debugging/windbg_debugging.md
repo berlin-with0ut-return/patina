@@ -21,7 +21,7 @@ issues with older versions.
 
 Windbg currently only supports connecting to the TCP-based GDB server. To support
 COM and named pipe-based transports, use the forwarding script
-[ComToTcpServer.py](https://github.com/microsoft/uefi_debug_tools/blob/main/Scripts/ComToTcpServer.py)
+[ComToTcpServer.py](https://github.com/microsoft/mu_feature_debugger/blob/main/Scripts/ComToTcpServer.py)
 to forward traffic between a serial device and a TCP server. This can also be useful
 if you want to debug from a different machine than the one connected to the device.
 
@@ -81,7 +81,7 @@ The most common commands are:
 | `!uefiext.init`    | Initializes the extension, detects the debugger state, and finds modules for symbol resolution. This should always be run on initial connection. |
 | `!uefiext.findall` | Finds all loaded modules; can be used at any time.      |
 | `!uefiext.info`    | Prints information about the system, such as the Patina version and the reason for the current exception. |
-| `!uefiext.monitor` | Invokes monitor commands on the target. See the [monitor commands](https://github.com/OpenDevicePartnership/patina/tree/main/core/patina_debugger/README.md#monitor-commands) for more details. |
+| `!uefiext.monitor` | Invokes monitor commands on the target. See the [monitor commands](../debugging.md#monitor-commands) for more details. |
 | `!uefiext.help`    | Prints the full list of commands.                       |
 
 Once the extension has been loaded, you can call `!command` instead of typing
@@ -97,7 +97,7 @@ symbols to be automatically resolved on connection.
 ### Installing the Extension
 
 To install the extension, download it from the most recent
-[uefi_debug_tools release](https://github.com/microsoft/uefi_debug_tools/releases/latest)
+[mu_feature_debugger release](https://github.com/microsoft/mu_feature_debugger/releases/latest)
 and add it to the extension path for the debugger. This can be done using the
 PowerShell commands below. Note that the architecture is the architecture of the
 host machine running Windbg, not the device being debugged.
@@ -105,13 +105,13 @@ host machine running Windbg, not the device being debugged.
 #### Installing for X64 Host
 
 ```powershell
-Invoke-WebRequest -Uri "https://github.com/microsoft/uefi_debug_tools/releases/latest/download/uefiext_x64.zip" -OutFile "$env:TEMP\uefiext.zip"; Expand-Archive "$env:TEMP\uefiext.zip" -DestinationPath "$env:TEMP\uefiext" -Force; Copy-Item "$env:TEMP\uefiext\uefiext.dll" -Destination "C:\Users\$Env:UserName\AppData\Local\DBG\EngineExtensions\UefiExt.dll"
+Invoke-WebRequest -Uri "https://github.com/microsoft/mu_feature_debugger/releases/latest/download/uefiext_x64.zip" -OutFile "$env:TEMP\uefiext.zip"; Expand-Archive "$env:TEMP\uefiext.zip" -DestinationPath "$env:TEMP\uefiext" -Force; Copy-Item "$env:TEMP\uefiext\uefiext.dll" -Destination "C:\Users\$Env:UserName\AppData\Local\DBG\EngineExtensions\UefiExt.dll"
 ```
 
 #### Installing for AArch64 Host
 
 ```powershell
-Invoke-WebRequest -Uri "https://github.com/microsoft/uefi_debug_tools/releases/latest/download/uefiext_arm64.zip" -OutFile "$env:TEMP\uefiext.zip"; Expand-Archive "$env:TEMP\uefiext.zip" -DestinationPath "$env:TEMP\uefiext" -Force; Copy-Item "$env:TEMP\uefiext\uefiext.dll" -Destination "C:\Users\$Env:UserName\AppData\Local\DBG\EngineExtensions\UefiExt.dll"
+Invoke-WebRequest -Uri "https://github.com/microsoft/mu_feature_debugger/releases/latest/download/uefiext_arm64.zip" -OutFile "$env:TEMP\uefiext.zip"; Expand-Archive "$env:TEMP\uefiext.zip" -DestinationPath "$env:TEMP\uefiext" -Force; Copy-Item "$env:TEMP\uefiext\uefiext.dll" -Destination "C:\Users\$Env:UserName\AppData\Local\DBG\EngineExtensions\UefiExt.dll"
 ```
 
 ## Symbols

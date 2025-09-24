@@ -13,7 +13,7 @@
 //!
 //! SPDX-License-Identifier: Apache-2.0
 //!
-use patina::pi::fw_fs::{
+use mu_pi::fw_fs::{
     ffs::{self, attributes, file},
     fv,
 };
@@ -56,7 +56,7 @@ impl<'a> FileRef<'a> {
     /// ```rust no_run
     /// use patina_ffs::file::{File, FileRef};
     /// use r_efi::efi;
-    /// use patina::pi::fw_fs::ffs;
+    /// use mu_pi::fw_fs::ffs;
     /// use patina_ffs::section::{Section, SectionHeader};
     ///
     /// // Build a file and then parse the resulting bytes back.
@@ -78,7 +78,7 @@ impl<'a> FileRef<'a> {
             Err(FirmwareFileSystemError::InvalidHeader)?;
         }
 
-        // SAFETY: buffer is large enough to contain file header.
+        // safety: buffer is large enough to contain file header.
         let header = unsafe { ptr::read_unaligned(buffer.as_ptr() as *const file::Header) };
 
         // determine actual size and content_offset
@@ -94,7 +94,7 @@ impl<'a> FileRef<'a> {
                 if buffer.len() < mem::size_of::<file::Header2>() {
                     Err(FirmwareFileSystemError::InvalidHeader)?;
                 }
-                // SAFETY: buffer is large enough to contain file header.
+                // safety: buffer is large enough to contain file header.
                 let header = unsafe { ptr::read_unaligned(buffer.as_ptr() as *const file::Header2) };
                 (header.extended_size as usize, mem::size_of::<file::Header2>())
             }
@@ -231,7 +231,7 @@ impl<'a> FileRef<'a> {
     /// ##Examples
     ///
     /// ```rust no_run
-    /// use patina::pi::fw_fs::ffs;
+    /// use mu_pi::fw_fs::ffs;
     /// use r_efi::efi;
     /// use patina_ffs::file::{File, FileRef};
     /// use patina_ffs::FirmwareFileSystemError;
@@ -316,7 +316,7 @@ impl File {
     /// ## Examples
     ///
     /// ```rust no_run
-    /// use patina::pi::fw_fs::ffs;
+    /// use mu_pi::fw_fs::ffs;
     /// use r_efi::efi;
     /// use patina_ffs::file::File;
     /// use patina_ffs::section::{Section, SectionHeader};
@@ -384,7 +384,7 @@ impl File {
         file_header.extended_size = (mem::size_of_val(&file_header) + content.len()) as u64;
 
         // calculate checksum (excludes state and integrity_check_file, set to zero)
-        // SAFETY: file_header is repr(C), safe to represent as byte slice for checksum
+        // safety: file_header is repr(C), safe to represent as byte slice for checksum
         let header_slice =
             unsafe { from_raw_parts(&raw const file_header as *const u8, mem::size_of_val(&file_header)) };
         let sum = header_slice.iter().fold(0u8, |sum, value| sum.wrapping_add(*value));
@@ -405,7 +405,6 @@ impl File {
             file_header.header.state = !file_header.header.state;
         }
 
-        // SAFETY: file_header is repr(C), safe to represent as byte slice for serialization.
         let header_slice =
             unsafe { from_raw_parts(&raw const file_header as *const u8, mem::size_of_val(&file_header)) };
         header_slice.to_vec()
@@ -426,7 +425,7 @@ impl File {
         file_header.size.copy_from_slice(&size.to_le_bytes()[0..3]);
 
         // calculate checksum (excludes state and integrity_check_file, set to zero)
-        // SAFETY: file_header is repr(C), safe to represent as byte slice for checksum
+        // safety: file_header is repr(C), safe to represent as byte slice for checksum
         let header_slice =
             unsafe { from_raw_parts(&raw const file_header as *const u8, mem::size_of_val(&file_header)) };
         let sum = header_slice.iter().fold(0u8, |sum, value| sum.wrapping_add(*value));
@@ -447,7 +446,6 @@ impl File {
             file_header.state = !file_header.state;
         }
 
-        // SAFETY: file_header is repr(C), safe to represent as byte slice for serialization.
         let header_slice =
             unsafe { from_raw_parts(&raw const file_header as *const u8, mem::size_of_val(&file_header)) };
         header_slice.to_vec()
@@ -517,7 +515,7 @@ impl File {
     /// ## Examples
     ///
     /// ```rust no_run
-    /// use patina::pi::fw_fs::ffs;
+    /// use mu_pi::fw_fs::ffs;
     /// use r_efi::efi;
     /// use patina_ffs::file::File;
     /// use patina_ffs::section::{Section, SectionHeader, SectionComposer};
@@ -554,7 +552,7 @@ impl File {
     /// ## Examples
     ///
     /// ```rust no_run
-    /// use patina::pi::fw_fs::ffs;
+    /// use mu_pi::fw_fs::ffs;
     /// use r_efi::efi;
     /// use patina_ffs::file::File;
     /// use patina_ffs::section::{Section, SectionHeader, SectionComposer};

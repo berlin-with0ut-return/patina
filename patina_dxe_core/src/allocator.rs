@@ -42,7 +42,7 @@ use patina::pi::{
 use r_efi::{efi, system::TPL_HIGH_LEVEL};
 pub use uefi_allocator::UefiAllocator;
 
-use patina::{
+use patina_sdk::{
     base::{SIZE_4KB, UEFI_PAGE_MASK, UEFI_PAGE_SIZE},
     error::EfiError,
     guids::{self, HOB_MEMORY_ALLOC_STACK},
@@ -487,9 +487,8 @@ pub fn core_allocate_pages(
             let result = match allocation_type {
                 efi::ALLOCATE_ANY_PAGES => allocator.allocate_pages(DEFAULT_ALLOCATION_STRATEGY, pages, alignment),
                 efi::ALLOCATE_MAX_ADDRESS => {
-                    // Safety: caller must ensure that "memory" is a valid pointer. It is null-checked above.
-                    let address = unsafe { memory.read_unaligned() };
-                    allocator.allocate_pages(AllocationStrategy::TopDown(Some(address as usize)), pages, alignment)
+                    let address = unsafe { memory.as_ref().expect("checked non-null is null") };
+                    allocator.allocate_pages(AllocationStrategy::TopDown(Some(*address as usize)), pages, alignment)
                 }
                 efi::ALLOCATE_ADDRESS => {
                     // Safety: caller must ensure that "memory" is a valid pointer. It is null-checked above.
@@ -796,7 +795,7 @@ pub fn terminate_memory_map(map_key: usize) -> Result<(), EfiError> {
 
 pub fn install_memory_type_info_table(system_table: &mut EfiSystemTable) -> Result<(), EfiError> {
     let table_ptr = NonNull::from(GCD.memory_type_info_table()).cast::<c_void>().as_ptr();
-    config_tables::core_install_configuration_table(guids::MEMORY_TYPE_INFORMATION, table_ptr, system_table)
+    config_tables::core_install_configuration_table(guid::MEMORY_TYPE_INFORMATION, table_ptr, system_table)
 }
 
 fn process_hob_allocations(hob_list: &HobList) {

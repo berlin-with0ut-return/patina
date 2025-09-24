@@ -280,9 +280,8 @@ fn core_connect_single_controller(
         return Ok(());
     }
 
-    // Safety: caller must ensure that the pointer contained in remaining_device_path is valid if it is Some(_).
     if let Some(device_path) = remaining_device_path
-        && unsafe { (device_path.read_unaligned()).r#type == efi::protocols::device_path::TYPE_END }
+        && unsafe { (*device_path).r#type == efi::protocols::device_path::TYPE_END }
     {
         return Ok(());
     }

@@ -231,7 +231,6 @@ ignore_errors = false
 description = "Run all tasks for PR readiness."
 dependencies = [
     "deny",
-    "cspell",
     "clippy",
     "build",
     "build-x64",

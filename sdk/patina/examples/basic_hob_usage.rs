@@ -62,24 +62,10 @@ pub struct BooleanConfig(pub bool);
 /// 1. Consuming a HOB that must exist for the component to run (hob1).
 /// 2. Consuming a HOB that may or may not exist (hob2).
 /// 3. Consuming a HOB that may be in the hob list multiple times (hob1 again).
-#[derive(IntoComponent)]
-pub struct MultipleHobConsumer;
-
-impl MultipleHobConsumer {
-    pub fn entry_point(self, hob1: Hob<CustomHob1>, hob2: Option<Hob<CustomHob2>>) -> Result<()> {
-        // (3) Show off that if we expect a HOB to exist multiple times, we can iterate over it.
-        for hob in hob1.iter() {
-            println!("  Hob1 data: {hob:?}");
-        }
-
-        // (2) Show off that we can have optional HOBs
-        match hob2 {
-            // (1) Show off that if we only expect a single HOB, we can dereference it directly.
-            Some(hob) => println!("  Hob2 exists with data: {:?}", *hob),
-            None => println!("  Hob2 does not exist, continuing without it."),
-        };
-
-        Ok(())
+pub fn consume_multiple_hobs(hob1: Hob<CustomHob1>, hob2: Option<Hob<CustomHob2>>) -> Result<()> {
+    // (3) Show off that if we expect a HOB to exist multiple times, we can iterate over it.
+    for hob in hob1.iter() {
+        println!("  Hob1 data: {hob:?}");
     }
 }
 

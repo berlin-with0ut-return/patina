@@ -88,9 +88,7 @@ exclude-labels:
   - 'type:dependabot'
   - 'type:file-sync'
   - 'type:notes'
-  - 'type:patina-bot'
   - 'type:question'
 
 exclude-contributors:
   - 'github-actions[bot]'
-  - 'patina-automation[bot]'

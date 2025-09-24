@@ -239,13 +239,13 @@ mod tests {
     #[test]
     /// A test that will stop compiling if we lose the ability to take self by value (self).
     fn test_component_entry_point_that_take_by_value_works() {
-        #[derive(crate::component::IntoComponent)]
+        #[derive(patina_sdk::component::IntoComponent)]
         struct ByValue {
             _x: u32,
         }
 
         impl ByValue {
-            fn entry_point(self, _cfg: Config<u32>) -> crate::error::Result<()> {
+            fn entry_point(self, _cfg: Config<u32>) -> patina_sdk::error::Result<()> {
                 Ok(())
             }
         }
@@ -256,13 +256,13 @@ mod tests {
     #[test]
     /// A test that will stop compiling if we lose the ability to take self by ref (&self).
     fn test_component_entry_point_that_take_by_ref_works() {
-        #[derive(crate::component::IntoComponent)]
+        #[derive(patina_sdk::component::IntoComponent)]
         struct ByRef {
             _x: u32,
         }
 
         impl ByRef {
-            fn entry_point(&self, _cfg: Config<u32>) -> crate::error::Result<()> {
+            fn entry_point(&self, _cfg: Config<u32>) -> patina_sdk::error::Result<()> {
                 Ok(())
             }
         }
@@ -273,13 +273,13 @@ mod tests {
     #[test]
     /// A test that will stop compiling if we lose the ability to take self by ref (&mut self).
     fn test_component_entry_point_that_take_by_mut_works() {
-        #[derive(crate::component::IntoComponent)]
+        #[derive(patina_sdk::component::IntoComponent)]
         struct ByMut {
             _x: u32,
         }
 
         impl ByMut {
-            fn entry_point(&mut self, _cfg: Config<u32>) -> crate::error::Result<()> {
+            fn entry_point(&mut self, _cfg: Config<u32>) -> patina_sdk::error::Result<()> {
                 Ok(())
             }
         }

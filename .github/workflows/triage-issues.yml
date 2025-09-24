@@ -1,8 +1,8 @@
 # This workflow assists with initial triage of new issues by applying
 # labels based on data provided in the issue.
 #
-# NOTE: This file is automatically synchronized from Patina DevOps. Update the original file there
-#       instead of the file in this repo.
+# Copyright (c) Microsoft Corporation.
+# SPDX-License-Identifier: Apache-2.0
 #
 # - Patina DevOps Repo: https://github.com/OpenDevicePartnership/patina-devops
 # - File Sync Settings: https://github.com/OpenDevicePartnership/patina-devops/blob/main/.sync/Files.yml

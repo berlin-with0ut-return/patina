@@ -184,15 +184,10 @@ pub trait IntoComponent<Input> {
 
 /// A prelude module that re-exports commonly used items from the `component` module.
 pub mod prelude {
-    pub use crate::{
-        component::{
-            IntoComponent,
-            hob::{FromHob, Hob},
-            params::{Commands, Config, ConfigMut},
-            service::{IntoService, Service},
-        },
-        error::{EfiError, Result},
-    };
+    pub use crate::component::hob::{FromHob, Hob};
+    pub use crate::component::params::{Commands, Config, ConfigMut};
+    pub use crate::component::service::{IntoService, Service};
+    pub use crate::error::{EfiError, Result};
 }
 
 #[cfg(test)]

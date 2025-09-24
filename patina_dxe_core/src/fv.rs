@@ -13,15 +13,14 @@ use core::{
 };
 
 use alloc::{boxed::Box, collections::BTreeMap};
-use patina::pi::{
-    self,
+use mu_pi::{
     fw_fs::{ffs, fv, fvb},
     hob,
 };
 
-use patina::{component::service::Service, error::EfiError};
 use patina_ffs::{section::SectionExtractor, volume::VolumeRef};
 use patina_internal_device_path::concat_device_path_to_boxed_slice;
+use patina_sdk::{component::service::Service, error::EfiError};
 use r_efi::efi;
 
 use crate::{
@@ -63,7 +62,7 @@ static PRIVATE_FV_DATA: tpl_lock::TplMutex<PrivateGlobalData> = tpl_lock::TplMut
 
 // FVB Protocol Functions
 extern "efiapi" fn fvb_get_attributes(
-    this: *mut pi::protocols::firmware_volume_block::Protocol,
+    this: *mut mu_pi::protocols::firmware_volume_block::Protocol,
     attributes: *mut fvb::attributes::EfiFvbAttributes2,
 ) -> efi::Status {
     if attributes.is_null() {
@@ -72,15 +71,15 @@ extern "efiapi" fn fvb_get_attributes(
 
     match core_fvb_get_attributes(this) {
         Err(err) => return err.into(),
-        // Safety: caller must provide a valid pointer to receive the attributes. It is null-checked above.
-        Ok(fvb_attributes) => unsafe { attributes.write_unaligned(fvb_attributes) },
+        // SAFETY: caller must provide a valid pointer to receive the attributes. It is null-checked above.
+        Ok(fvb_attributes) => unsafe { attributes.write(fvb_attributes) },
     };
 
     efi::Status::SUCCESS
 }
 
 fn core_fvb_get_attributes(
-    this: *mut pi::protocols::firmware_volume_block::Protocol,
+    this: *mut mu_pi::protocols::firmware_volume_block::Protocol,
 ) -> Result<fvb::attributes::EfiFvbAttributes2, EfiError> {
     let private_data = PRIVATE_FV_DATA.lock();
 
@@ -96,7 +95,7 @@ fn core_fvb_get_attributes(
 }
 
 extern "efiapi" fn fvb_set_attributes(
-    _this: *mut pi::protocols::firmware_volume_block::Protocol,
+    _this: *mut mu_pi::protocols::firmware_volume_block::Protocol,
     _attributes: *mut fvb::attributes::EfiFvbAttributes2,
 ) -> efi::Status {
     efi::Status::UNSUPPORTED
@@ -116,8 +115,8 @@ extern "efiapi" fn fvb_get_physical_address(
         return efi::Status::NOT_FOUND;
     };
 
-    // Safety: caller must provide a valid pointer to receive the address. It is null-checked above.
-    unsafe { address.write_unaligned(fvb_data.physical_address) };
+    // SAFETY: caller must provide a valid pointer to receive the address. It is null-checked above.
+    unsafe { address.write(fvb_data.physical_address) };
 
     efi::Status::SUCCESS
 }
@@ -137,17 +136,17 @@ extern "efiapi" fn fvb_get_block_size(
         Ok((size, remaining_blocks)) => (size, remaining_blocks),
     };
 
-    // Safety: caller must provide valid pointers to receive the block size and number of blocks. They are null-checked above.
+    // SAFETY: caller must provide valid pointers to receive the block size and number of blocks. They are null-checked above.
     unsafe {
-        block_size.write_unaligned(size);
-        number_of_blocks.write_unaligned(remaining_blocks);
+        block_size.write(size);
+        number_of_blocks.write(remaining_blocks);
     }
 
     efi::Status::SUCCESS
 }
 
 fn core_fvb_get_block_size(
-    this: *mut pi::protocols::firmware_volume_block::Protocol,
+    this: *mut mu_pi::protocols::firmware_volume_block::Protocol,
     lba: efi::Lba,
 ) -> Result<(usize, usize), EfiError> {
     let private_data = PRIVATE_FV_DATA.lock();
@@ -188,7 +187,7 @@ extern "efiapi" fn fvb_read(
 
     if data.len() > bytes_to_read {
         // Safety: caller must provide a valid pointer for num_bytes. It is null-checked above.
-        unsafe { num_bytes.write_unaligned(data.len()) };
+        unsafe { num_bytes.write(data.len()) };
         return efi::Status::BUFFER_TOO_SMALL;
     }
 
@@ -198,14 +197,14 @@ extern "efiapi" fn fvb_read(
     unsafe {
         let dest_buffer = slice::from_raw_parts_mut(buffer as *mut u8, data.len());
         dest_buffer.copy_from_slice(data);
-        num_bytes.write_unaligned(data.len());
+        num_bytes.write(data.len());
     }
 
     if data.len() != bytes_to_read { efi::Status::BAD_BUFFER_SIZE } else { efi::Status::SUCCESS }
 }
 
 fn core_fvb_read(
-    this: *mut pi::protocols::firmware_volume_block::Protocol,
+    this: *mut mu_pi::protocols::firmware_volume_block::Protocol,
     lba: efi::Lba,
     offset: usize,
     num_bytes: usize,
@@ -288,7 +287,7 @@ fn install_fvb_protocol(
 
 // Firmware Volume protocol functions
 extern "efiapi" fn fv_get_volume_attributes(
-    this: *const pi::protocols::firmware_volume::Protocol,
+    this: *const mu_pi::protocols::firmware_volume::Protocol,
     fv_attributes: *mut fv::attributes::EfiFvAttributes,
 ) -> efi::Status {
     if fv_attributes.is_null() {
@@ -300,14 +299,14 @@ extern "efiapi" fn fv_get_volume_attributes(
         Ok(attrs) => attrs,
     };
 
-    // Safety: caller must provide a valid pointer to receive the attributes. It is null-checked above.
-    unsafe { fv_attributes.write_unaligned(fv_attributes_data) };
+    // SAFETY: caller must provide a valid pointer to receive the attributes. It is null-checked above.
+    unsafe { fv_attributes.write(fv_attributes_data) };
 
     efi::Status::SUCCESS
 }
 
 fn core_fv_get_volume_attributes(
-    this: *const pi::protocols::firmware_volume::Protocol,
+    this: *const mu_pi::protocols::firmware_volume::Protocol,
 ) -> Result<fv::attributes::EfiFvAttributes, EfiError> {
     let private_data = PRIVATE_FV_DATA.lock();
 
@@ -323,7 +322,7 @@ fn core_fv_get_volume_attributes(
 }
 
 extern "efiapi" fn fv_set_volume_attributes(
-    _this: *const pi::protocols::firmware_volume::Protocol,
+    _this: *const mu_pi::protocols::firmware_volume::Protocol,
     _fv_attributes: *mut fv::attributes::EfiFvAttributes,
 ) -> efi::Status {
     efi::Status::UNSUPPORTED
@@ -348,8 +347,8 @@ extern "efiapi" fn fv_read_file(
     }
 
     // Safety: caller must provide valid pointers for buffer_size and name_guid. They are null-checked above.
-    let local_buffer_size = unsafe { buffer_size.read_unaligned() };
-    let local_name_guid = unsafe { name_guid.read_unaligned() };
+    let local_buffer_size = unsafe { *buffer_size };
+    let local_name_guid = unsafe { *name_guid };
 
     // for this routine, the file data should be copied into the output buffer directly from the FileRef
     // constructed here. If this logic was moved into a `core_fv_read_file()` routine as with other functions
@@ -394,7 +393,7 @@ extern "efiapi" fn fv_read_file(
     }
 
     // Safety: caller must provide a valid pointer for buffer. It is null-checked above.
-    let mut local_buffer_ptr = unsafe { buffer.read_unaligned() };
+    let mut local_buffer_ptr = unsafe { *buffer };
 
     if local_buffer_size > 0 {
         //caller indicates they have allocated a buffer to receive the file data.
@@ -442,7 +441,7 @@ extern "efiapi" fn fv_read_section(
     }
 
     // Safety: caller must provide valid pointer for name_guid. It is null-checked above.
-    let local_name_guid = unsafe { name_guid.read_unaligned() };
+    let local_name_guid = unsafe { *name_guid };
 
     let section = match core_fv_read_section(this, local_name_guid, section_type, section_instance) {
         Ok(section) => section,
@@ -498,7 +497,7 @@ extern "efiapi" fn fv_read_section(
 }
 
 fn core_fv_read_section(
-    this: *const pi::protocols::firmware_volume::Protocol,
+    this: *const mu_pi::protocols::firmware_volume::Protocol,
     name_guid: efi::Guid,
     section_type: ffs::section::EfiSectionType,
     section_instance: usize,
@@ -556,8 +555,8 @@ extern "efiapi" fn fv_get_next_file(
     }
 
     // Safety: caller must provide valid pointers for key and file_type. They are null-checked above.
-    let local_key = unsafe { (key as *mut usize).read_unaligned() };
-    let local_file_type = unsafe { file_type.read_unaligned() };
+    let local_key = unsafe { *(key as *mut usize) };
+    let local_file_type = unsafe { *(file_type) };
 
     if local_file_type >= ffs::file::raw::r#type::FFS_MIN {
         return efi::Status::NOT_FOUND;
@@ -571,22 +570,22 @@ extern "efiapi" fn fv_get_next_file(
     // found matching file. Update the key and outputs.
     // Safety: caller must provide valid pointers for key, file_type, name_guid, attributes, and size. They are null-checked above.
     unsafe {
-        (key as *mut usize).write_unaligned(local_key + 1);
-        name_guid.write_unaligned(file_name);
+        (key as *mut usize).write(local_key + 1);
+        name_guid.write(file_name);
         if (fv_attributes & fvb::attributes::raw::fvb2::MEMORY_MAPPED) == fvb::attributes::raw::fvb2::MEMORY_MAPPED {
-            attributes.write_unaligned(fv_attributes | fv::file::raw::attribute::MEMORY_MAPPED);
+            attributes.write(fv_attributes | fv::file::raw::attribute::MEMORY_MAPPED);
         } else {
-            attributes.write_unaligned(fv_attributes);
+            attributes.write(fv_attributes);
         }
-        size.write_unaligned(file_size);
-        file_type.write_unaligned(found_file_type);
+        size.write(file_size);
+        file_type.write(found_file_type);
     }
 
     efi::Status::SUCCESS
 }
 
 fn core_fv_get_next_file(
-    this: *const pi::protocols::firmware_volume::Protocol,
+    this: *const mu_pi::protocols::firmware_volume::Protocol,
     file_type: fv::EfiFvFileType,
     key: usize,
 ) -> Result<(efi::Guid, fv::file::EfiFvFileAttributes, usize, fv::EfiFvFileType), EfiError> {
@@ -841,20 +840,16 @@ pub fn register_section_extractor(extractor: Service<dyn SectionExtractor>) {
 mod tests {
     use super::*;
     use crate::test_support;
-    use patina::pi::{
-        BootMode,
-        hob::{self, Hob, HobList},
-    };
+    use mu_pi::hob::Hob;
     use patina_ffs_extractors::CompositeSectionExtractor;
     extern crate alloc;
     use crate::test_collateral;
-    use std::{
-        alloc::{Layout, alloc, dealloc},
-        ffi::c_void,
-        fs::File,
-        io::Read,
-        ptr,
-    };
+    use mu_pi::hob::HobList;
+    use mu_pi::{BootMode, hob};
+    use std::alloc::{Layout, alloc, dealloc};
+    use std::ffi::c_void;
+    use std::ptr;
+    use std::{fs::File, io::Read};
 
     //Populate Null References for error cases
     const BUFFER_SIZE_EMPTY: usize = 0;

@@ -3,8 +3,8 @@
 # All repos should sync at the same time.
 #   '0 0,12 * * *''
 #
-# NOTE: This file is automatically synchronized from Patina DevOps. Update the original file there
-#       instead of the file in this repo.
+# Copyright (c) Microsoft Corporation.
+# SPDX-License-Identifier: Apache-2.0
 #
 # - Patina DevOps Repo: https://github.com/OpenDevicePartnership/patina-devops
 # - File Sync Settings: https://github.com/OpenDevicePartnership/patina-devops/blob/main/.sync/Files.yml

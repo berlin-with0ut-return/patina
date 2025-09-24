@@ -6,16 +6,21 @@
 //!
 //! SPDX-License-Identifier: Apache-2.0
 //!
-
-use core::{ffi::c_void, ptr};
-
-use alloc::collections::LinkedList;
-use patina::error::EfiError;
+use alloc::collections::BTreeMap;
+use core::{
+    ffi::c_void,
+    mem, ptr,
+    sync::atomic::{AtomicBool, Ordering},
+};
+use mu_pi::{list_entry, protocols::runtime};
+use patina_sdk::{base::UEFI_PAGE_SIZE, error::EfiError};
 use r_efi::efi;
 use spin::Mutex;
 
-use crate::{events::EVENT_DB, pecoff::relocation::RelocationBlock, protocols::PROTOCOL_DB};
-use patina::pi::{list_entry, protocols::runtime};
+use crate::{
+    allocator::core_allocate_pool, image::core_relocate_runtime_images, protocols::core_install_protocol_interface,
+    systemtables::SYSTEM_TABLE,
+};
 
 struct RuntimeData {
     runtime_arch_ptr: *mut runtime::Protocol,
@@ -27,23 +32,24 @@ unsafe impl Sync for RuntimeData {}
 unsafe impl Send for RuntimeData {}
 
 static RUNTIME_DATA: Mutex<RuntimeData> = Mutex::new(RuntimeData::new());
+static RUNTIME_EVENTS: Mutex<BTreeMap<usize, crate::event_db::Event, &'static crate::allocator::UefiAllocator>> =
+    Mutex::new(BTreeMap::new_in(&crate::allocator::EFI_RUNTIME_SERVICES_DATA_ALLOCATOR));
 
-impl RuntimeData {
-    const fn new() -> Self {
-        Self {
-            runtime_arch_ptr: ptr::null_mut(),
-            runtime_images: LinkedList::new_in(&crate::allocator::EFI_RUNTIME_SERVICES_DATA_ALLOCATOR),
-            runtime_events: LinkedList::new_in(&crate::allocator::EFI_RUNTIME_SERVICES_DATA_ALLOCATOR),
-        }
-    }
-
-    fn update_protocol_lists(&mut self) {
-        if self.runtime_arch_ptr.is_null() {
-            return;
-        }
-
-        // SAFETY: The protocol is identified by it's GUID and should be a valid
-        //         pointer to a EFI_RUNTIME_ARCH_PROTOCOL structure.
+pub extern "efiapi" fn set_virtual_address_map(
+    memory_map_size: usize,
+    descriptor_size: usize,
+    descriptor_version: u32,
+    virtual_map: *mut efi::MemoryDescriptor,
+) -> efi::Status {
+    //
+    // Can only switch to virtual addresses once the memory map is locked down,
+    // and can only set it once.
+    //
+    // NOTE: Boot services have been destroyed at this point, this routine must not
+    //       call into any other subsystems. Doing so can cause unpredictable behavior.
+    //
+    {
+        let mut runtime_data = RUNTIME_DATA.lock();
         unsafe {
             // Update the image links
             let mut prev = &mut (*self.runtime_arch_ptr).image_head;
@@ -66,6 +72,134 @@ impl RuntimeData {
             (*self.runtime_arch_ptr).event_head.back_link = prev as *mut _;
         }
     }
+
+    // TODO: Add status code reporting (need to check runtime eligibility)
+
+    // Signal EVT_SIGNAL_VIRTUAL_ADDRESS_CHANGE events (externally registered events)
+    for event in RUNTIME_EVENTS.lock().values() {
+        if event.event_group() == Some(efi::EVENT_GROUP_VIRTUAL_ADDRESS_CHANGE)
+            && let Some(function) = event.notify_fn()
+        {
+            function(event.efi_event(), event.notify_context().unwrap_or(ptr::null_mut()));
+        }
+    }
+
+    // Convert runtime images
+    core_relocate_runtime_images();
+
+    // Convert runtime services pointers
+    convert_pointer(
+        0,
+        core::ptr::addr_of_mut!(
+            SYSTEM_TABLE.lock().as_mut().expect("Invalid system table.").runtime_services_mut().get_time
+        ) as *mut *mut c_void,
+    );
+    convert_pointer(
+        0,
+        core::ptr::addr_of_mut!(
+            SYSTEM_TABLE.lock().as_mut().expect("Invalid system table.").runtime_services_mut().set_time
+        ) as *mut *mut c_void,
+    );
+    convert_pointer(
+        0,
+        core::ptr::addr_of_mut!(
+            SYSTEM_TABLE.lock().as_mut().expect("Invalid system table.").runtime_services_mut().get_wakeup_time
+        ) as *mut *mut c_void,
+    );
+    convert_pointer(
+        0,
+        core::ptr::addr_of_mut!(
+            SYSTEM_TABLE.lock().as_mut().expect("Invalid system table.").runtime_services_mut().set_wakeup_time
+        ) as *mut *mut c_void,
+    );
+    convert_pointer(
+        0,
+        core::ptr::addr_of_mut!(
+            SYSTEM_TABLE.lock().as_mut().expect("Invalid system table.").runtime_services_mut().reset_system
+        ) as *mut *mut c_void,
+    );
+    convert_pointer(
+        0,
+        core::ptr::addr_of_mut!(
+            SYSTEM_TABLE
+                .lock()
+                .as_mut()
+                .expect("Invalid system table.")
+                .runtime_services_mut()
+                .get_next_high_mono_count
+        ) as *mut *mut c_void,
+    );
+    convert_pointer(
+        0,
+        core::ptr::addr_of_mut!(
+            SYSTEM_TABLE.lock().as_mut().expect("Invalid system table.").runtime_services_mut().get_variable
+        ) as *mut *mut c_void,
+    );
+    convert_pointer(
+        0,
+        core::ptr::addr_of_mut!(
+            SYSTEM_TABLE.lock().as_mut().expect("Invalid system table.").runtime_services_mut().set_variable
+        ) as *mut *mut c_void,
+    );
+    convert_pointer(
+        0,
+        core::ptr::addr_of_mut!(
+            SYSTEM_TABLE.lock().as_mut().expect("Invalid system table.").runtime_services_mut().get_next_variable_name
+        ) as *mut *mut c_void,
+    );
+    convert_pointer(
+        0,
+        core::ptr::addr_of_mut!(
+            SYSTEM_TABLE.lock().as_mut().expect("Invalid system table.").runtime_services_mut().query_variable_info
+        ) as *mut *mut c_void,
+    );
+    convert_pointer(
+        0,
+        core::ptr::addr_of_mut!(
+            SYSTEM_TABLE.lock().as_mut().expect("Invalid system table.").runtime_services_mut().update_capsule
+        ) as *mut *mut c_void,
+    );
+    convert_pointer(
+        0,
+        core::ptr::addr_of_mut!(
+            SYSTEM_TABLE
+                .lock()
+                .as_mut()
+                .expect("Invalid system table.")
+                .runtime_services_mut()
+                .query_capsule_capabilities
+        ) as *mut *mut c_void,
+    );
+    SYSTEM_TABLE.lock().as_mut().expect("Invalid system table.").checksum_runtime_services();
+
+    // Convert system table runtime fields
+    convert_pointer(
+        0,
+        core::ptr::addr_of_mut!(
+            SYSTEM_TABLE.lock().as_mut().expect("Invalid system table.").system_table_mut().firmware_vendor
+        ) as *mut *mut c_void,
+    );
+    convert_pointer(
+        0,
+        core::ptr::addr_of_mut!(
+            SYSTEM_TABLE.lock().as_mut().expect("Invalid system table.").system_table_mut().configuration_table
+        ) as *mut *mut c_void,
+    );
+    convert_pointer(
+        0,
+        core::ptr::addr_of_mut!(
+            SYSTEM_TABLE.lock().as_mut().expect("Invalid system table.").system_table_mut().runtime_services
+        ) as *mut *mut c_void,
+    );
+    SYSTEM_TABLE.lock().as_mut().expect("Invalid system table.").checksum();
+
+    {
+        let mut runtime_data = RUNTIME_DATA.lock();
+        runtime_data.virtual_map = ptr::null_mut();
+        runtime_data.virtual_map_index = 0;
+    }
+
+    efi::Status::SUCCESS
 }
 
 pub fn init_runtime_support(_rt: &mut efi::RuntimeServices) {
@@ -79,84 +213,49 @@ pub fn init_runtime_support(_rt: &mut efi::RuntimeServices) {
         .expect("Failed to register protocol notify on runtime protocol.");
 }
 
-pub fn finalize_runtime_support() {
-    let data = RUNTIME_DATA.lock();
-    if !data.runtime_arch_ptr.is_null() {
-        unsafe { (*data.runtime_arch_ptr).at_runtime.store(true, core::sync::atomic::Ordering::Relaxed) };
+pub fn init_runtime_support(rt: &mut efi::RuntimeServices) {
+    rt.convert_pointer = convert_pointer;
+    rt.set_virtual_address_map = set_virtual_address_map;
+
+    match core_allocate_pool(efi::RUNTIME_SERVICES_DATA, mem::size_of::<runtime::Protocol>()) {
+        Err(err) => panic!("Failed to allocate the Runtime Architecture Protocol: {err:?}"),
+        Ok(allocation) => unsafe {
+            let allocation_ptr = allocation as *mut runtime::Protocol;
+
+            let image_head_ptr = ptr::addr_of_mut!(allocation_ptr.as_mut().unwrap().image_head);
+            let event_head_ptr = ptr::addr_of_mut!(allocation_ptr.as_mut().unwrap().event_head);
+
+            allocation_ptr.write(runtime::Protocol {
+                // The Rust usage of the protocol won't actually use image_head or event_head,
+                // so pass empty linked lists (just heads that point to themselves).
+                image_head: list_entry::Entry { forward_link: image_head_ptr, back_link: image_head_ptr },
+                event_head: list_entry::Entry { forward_link: event_head_ptr, back_link: event_head_ptr },
+                memory_descriptor_size: mem::size_of::<efi::MemoryDescriptor>(), // Should be 16-byte aligned
+                memory_descriptor_version: efi::MEMORY_DESCRIPTOR_VERSION,
+                memory_map_size: 0,
+                memory_map_physical: ptr::null_mut(),
+                memory_map_virtual: ptr::null_mut(),
+                virtual_mode: AtomicBool::new(false),
+                at_runtime: AtomicBool::new(false),
+            });
+            RUNTIME_DATA.lock().runtime_arch_ptr = allocation_ptr;
+            // Install the protocol on a new handle
+            core_install_protocol_interface(None, runtime::PROTOCOL_GUID, allocation)
+                .expect("Failed to install the Runtime Architecture protocol");
+        },
     }
 }
 
-extern "efiapi" fn runtime_protocol_notify(_event: efi::Event, _context: *mut c_void) {
-    log::info!("Runtime protocol installed. Setting up pointers.");
-    let ptr = PROTOCOL_DB.locate_protocol(runtime::PROTOCOL_GUID).expect("Failed to locate runtime protocol.");
-    let mut data = RUNTIME_DATA.lock();
-    data.runtime_arch_ptr = ptr as *mut runtime::Protocol;
-    data.update_protocol_lists();
-}
-
-pub fn add_runtime_event(
-    event: efi::Event,
-    event_type: u32,
-    notify_tpl: efi::Tpl,
-    notify_fn: Option<efi::EventNotify>,
-    event_group: Option<efi::Guid>,
-    context: Option<*mut c_void>,
-) -> Result<(), EfiError> {
-    let mut data = RUNTIME_DATA.lock();
-
-    // The event modules will separate out the event group from the event type for consistency,
-    // but the runtime architectural protocol expects them to be combined. Merge them here.
-    let event_type = match event_group {
-        Some(efi::EVENT_GROUP_VIRTUAL_ADDRESS_CHANGE) => efi::EVT_SIGNAL_VIRTUAL_ADDRESS_CHANGE,
-        _ => event_type,
-    };
-
-    let function = notify_fn.ok_or(EfiError::InvalidParameter)?;
-    data.runtime_events.push_back(runtime::EventEntry {
-        event_type,
-        notify_tpl,
-        notify_function: function,
-        context: context.unwrap_or(ptr::null_mut()),
-        event,
-        link: list_entry::Entry { forward_link: ptr::null_mut(), back_link: ptr::null_mut() },
-    });
-
-    data.update_protocol_lists();
+pub fn add_runtime_event(event: crate::event_db::Event) -> Result<(), EfiError> {
+    let event_id = event.event_id();
+    RUNTIME_EVENTS.lock().insert(event_id, event);
     Ok(())
 }
 
-pub fn remove_runtime_event(event: efi::Event) -> Result<(), EfiError> {
-    let mut data = RUNTIME_DATA.lock();
-    for _ in data.runtime_events.extract_if(|entry| entry.event == event) {}
-    data.update_protocol_lists();
-    Ok(())
-}
-
-pub fn add_runtime_image(
-    image_base: *mut c_void,
-    image_size: u64,
-    relocation_data: &[RelocationBlock],
-    handle: efi::Handle,
-) -> Result<(), EfiError> {
-    let mut data = RUNTIME_DATA.lock();
-
-    let relocation_data = crate::pecoff::flatten_runtime_relocation_data(relocation_data);
-    data.runtime_images.push_back(runtime::ImageEntry {
-        image_base,
-        image_size,
-        relocation_data: relocation_data.as_mut_ptr() as *mut _,
-        handle,
-        link: list_entry::Entry { forward_link: ptr::null_mut(), back_link: ptr::null_mut() },
-    });
-
-    data.update_protocol_lists();
-    Ok(())
-}
-
-pub fn remove_runtime_image(image_handle: efi::Handle) -> Result<(), EfiError> {
-    let mut data = RUNTIME_DATA.lock();
-    for _ in data.runtime_images.extract_if(|entry| entry.handle == image_handle) {}
-    data.update_protocol_lists();
+pub fn remove_runtime_event(event_id: usize) -> Result<(), EfiError> {
+    if RUNTIME_EVENTS.lock().remove(&event_id).is_none() {
+        return Err(EfiError::InvalidParameter);
+    }
     Ok(())
 }
 

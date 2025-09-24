@@ -6,8 +6,7 @@ will inspect the state of the system through memory, registers, and exception fr
 the debugger application with a snapshot of the system at the moment it took the exception.
 The communication between the exception handlers and the software debugger is implemented
 using the [GDB Remote Protocol](https://sourceware.org/gdb/current/onlinedocs/gdb.html/Remote-Protocol.html)
-which is supported by a number of debugger applications. For instructions on configuring
-and using the debugger, see the [`patina_debugging` README](https://github.com/OpenDevicePartnership/patina/tree/main/core/patina_debugger/README.md).
+which is supported by a number of debugger applications.
 
 The Patina debugger is a software debugger which, in contrast to a hardware or JTAG
 debugger, is implemented entirely within the patina software stack. This has many
@@ -93,7 +92,7 @@ services because of the unique integration of the debugger in core initializatio
 
 For the self-hosted debugger to communicate with the debugging software, such as
 Windbg, there needs to be a physical line of communication between the system under
-debug and the host machine. This transport should implement the [SerialIO](https://github.com/OpenDevicePartnership/patina/blob/main/sdk/patina/src/serial.rs)
+debug and the host machine. This transport should implement the [SerialIO](https://github.com/OpenDevicePartnership/patina/blob/main/sdk/patina_sdk/src/serial.rs)
 trait to provide a simple mechanism to read or write to the bus. This transport may be
 the same transport used by the logging console or it may be a dedicated UART or other
 serial connection. Most devices should be able to use a standard UART implementation
@@ -173,7 +172,8 @@ debugger, the [gdbstub](https://crates.io/crates/gdbstub) crate is used. This cr
 handles all of the protocol packet interpretation and creation and calls out to
 a _target_ structure provided by the Patina debugger to handle the debugging operations
 such as reading/writing registers. Additionally a custom gdbstub_arch is used to
-align to the UEFI interrupt context structures.
+align to the [Project MU debugger](https://github.com/microsoft/mu_feature_debugger)
+implementation.
 
 The GDB protocol was selected because it is a robust communication standard that
 is open and supported by many debug applications, including Windbg, GDB, LLDB, etc.
@@ -284,7 +284,9 @@ Configuring the debugger is left to the platform as the decision on when and how
 to enable the debugger has environment, security, and other considerations that
 are specific to a platform and its use case. There are two supported methods for
 enabling the debugger: hard-coded enablement through use of the enablement routines
-in the `PatinaDebugger` struct.
+in the `PatineDebugger` struct, or through use of the [Debugger Control HOB](https://github.com/microsoft/mu_feature_debugger/blob/main/DebuggerFeaturePkg/Include/DebuggerControlHob.h).
+
+> The Debugger Control HOB is planned support that is not yet available.
 
 Direct configuration through the `PatinaDebugger` initialization can be useful for
 quick configuration during development or controlled configuration through a platform
@@ -309,7 +311,7 @@ support, which patina relies on.
 
 Windbg supports the GDB interface through an EXDI extension. This implementation
 uses a small subset of the full GDB protocol, but is sufficient for most operations.
-To supplement this support, the [UefiExt extension](https://github.com/microsoft/uefi_debug_tools/tree/main/UefiDbgExt#readme)
+To supplement this support, the [UefiExt extension](https://github.com/microsoft/mu_feature_debugger/tree/main/UefiDbgExt#readme)
 has been modified to support the Patina debugger. The extension is critical for
 the developer experience while using Windbg.
 

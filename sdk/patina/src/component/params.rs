@@ -185,9 +185,9 @@ impl ComponentInput for () {}
 #[diagnostic::on_unimplemented(
     message = "The function signature does not meet the requirements.\n\n{Self}\n",
     note = "1. The first parameter must be Self, &Self, or &mut Self.",
-    note = "2. The remaining parameters must implement patina::component::params::Param",
+    note = "2. The remaining parameters must implement patina_sdk::component::params::Param",
     note = "3. Only a function with up to 5 parameters, excluding self, is supported.",
-    note = "4. The return type must be patina::error::Result<()>"
+    note = "4. The return type must be patina_sdk::error::Result<()>"
 )]
 pub trait ParamFunction<Marker>: Send + Sync + 'static {
     /// All parameters of the function that are retrievable from [Storage].

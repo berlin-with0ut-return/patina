@@ -80,7 +80,7 @@ impl DebuggerArch for X64Arch {
         // SAFETY: This is an architecturally defined operation to flush the caches and wbinvd is a serializing
         // instruction.
         unsafe {
-            asm!("wbinvd");
+            asm!("mov {0}, cr3", "mov cr3, {0}", out(reg) _);
         }
     }
 
@@ -132,8 +132,6 @@ impl DebuggerArch for X64Arch {
 
     fn reboot() {
         // Reset the system through the Reset Control Register.
-        // SAFETY: This is a well known instruction sequence to reset the system.
-        // If we fail, we simply halt, which acceptable under the debugger.
         unsafe {
             asm!("cli",
                  "out dx, al",
@@ -183,33 +181,6 @@ impl DebuggerArch for X64Arch {
                     );
                 }
                 let _ = write!(out, "GDT: {gdtr:#x?}");
-            }
-            Some("flush_tlb") => {
-                // SAFETY: We are simply reading and writing back the same CR3. This has the side effect of flushing
-                // the TLB.
-                unsafe {
-                    asm!("mov {0}, cr3", "mov cr3, {0}", out(reg) _, options(nostack, nomem));
-                }
-            }
-            Some("mtrr") => {
-                if let Some(val) = tokens.next() {
-                    let mtrr = patina_mtrr::create_mtrr_lib(0);
-                    let addr = match u64::from_str_radix(val.trim_start_matches("0x"), 16) {
-                        Ok(a) => a,
-                        Err(_) => {
-                            let _ = out.write_str(
-                                alloc::format!("Invalid address format: '{val}'. Expected hex address (e.g. 0x1000).")
-                                    .as_str(),
-                            );
-                            return;
-                        }
-                    };
-
-                    let attr = mtrr.get_memory_attribute(addr);
-                    let _ = write!(out, "{}", attr);
-                } else {
-                    let _ = out.write_str("Usage: mtrr <base_address>");
-                }
             }
             _ => {
                 let _ = out.write_str("Unknown X64 monitor command. Supported commands: regs, flush_tlb, mtrr <addr>");

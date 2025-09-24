@@ -42,6 +42,9 @@
 - [Patina DXE Core Requirements](integrate/patina_dxe_core_requirements.md)
 - [Patina DXE Core Requirements Checklist](integrate/patina_dxe_core_requirements_checklist.md)
 - [Setting up the Patina DXE Core](integrate/dxe_core.md)
+- [Compiling External to the Platform](integrate/compile_external.md)
+- [Compiling Local to the Platform (Deprecated)](integrate/compile_local.md)
+- [Integrating an Externally Compiled EFI Binary to the Platform](integrate/platform_external.md)
 
 # Patina Component Model
 
@@ -64,6 +67,10 @@
   - [Synchronization](dxe_core/synchronization.md)
   - [Testing](dxe_core/testing.md)
   - [UEFI Driver Model](dxe_core/driver_model.md)
+
+# Component Documentation
+
+- [Performance Analysis](components/patina_performance.md)
 
 -----------
 - [Contributors](misc/contributors.md)

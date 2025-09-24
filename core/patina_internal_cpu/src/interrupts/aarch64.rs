@@ -30,10 +30,7 @@ impl super::EfiSystemContextFactory for ExceptionContextAArch64 {
 
 impl super::EfiExceptionStackTrace for ExceptionContextAArch64 {
     fn dump_stack_trace(&self) {
-        // SAFETY: This is called from the exception context. We have no choice but to trust the ELR and SP values.
-        // the stack trace module does its best to not cause recursive exceptions.
-        let stack_frame = StackFrame { pc: self.elr, sp: self.sp, fp: self.fp };
-        if let Err(err) = unsafe { StackTrace::dump_with(stack_frame) } {
+        if let Err(err) = unsafe { StackTrace::dump_with(self.elr, self.sp) } {
             log::error!("StackTrace: {err}");
         }
     }
@@ -61,7 +58,9 @@ impl super::EfiExceptionStackTrace for ExceptionContextAArch64 {
 pub fn enable_interrupts() {
     #[cfg(all(not(test), target_arch = "aarch64"))]
     {
-        write_sysreg!(reg daifclr, imm 0x02, "isb sy");
+        unsafe {
+            asm!("msr   daifclr, 0x02", "isb", options(nostack));
+        }
     }
     #[cfg(not(target_arch = "aarch64"))]
     {
@@ -73,7 +72,9 @@ pub fn enable_interrupts() {
 pub fn disable_interrupts() {
     #[cfg(all(not(test), target_arch = "aarch64"))]
     {
-        write_sysreg!(reg daifset, imm 0x02, "isb sy");
+        unsafe {
+            asm!("msr   daifset, 0x02", "isb", options(nostack));
+        }
     }
     #[cfg(not(target_arch = "aarch64"))]
     {

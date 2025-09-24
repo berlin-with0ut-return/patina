@@ -27,7 +27,8 @@ use core::{
     result::Result,
 };
 use linked_list_allocator::{align_down_size, align_up_size};
-use patina::{
+use mu_pi::{dxe_services::GcdMemoryType, hob::EFiMemoryTypeInformation};
+use patina_sdk::{
     base::{UEFI_PAGE_SHIFT, UEFI_PAGE_SIZE, align_up},
     error::EfiError,
     pi::{dxe_services::GcdMemoryType, hob::EFiMemoryTypeInformation},
@@ -1461,7 +1462,7 @@ mod tests {
                 let allocation = fsb
                     .allocate_pages(gcd::AllocateType::TopDown(Some(target_address as usize)), pages, UEFI_PAGE_SIZE)
                     .unwrap()
-                    .cast::<u8>();
+                    .as_non_null_ptr();
                 assert!((allocation.as_ptr() as usize + uefi_pages_to_size!(pages)) <= target_address as usize);
 
                 unsafe {

@@ -193,7 +193,7 @@ impl Eq for TaggedEventNotification {}
 // whereas efi::Event is used as the public index or handle into the event database.
 // In the code below efi::Event is used to qualify the index/handle type, where as `Event` with
 // scope qualification refers to this private type.
-struct Event {
+pub(crate) struct Event {
     event_id: usize,
     event_type: EventType,
     event_group: Option<efi::Guid>,
@@ -277,8 +277,24 @@ impl Event {
         })
     }
 
+    pub fn event_id(&self) -> usize {
+        self.event_id
+    }
+
     pub fn efi_event(&self) -> efi::Event {
         self.event_id as efi::Event
+    }
+
+    pub fn event_group(&self) -> Option<efi::Guid> {
+        self.event_group
+    }
+
+    pub fn notify_fn(&self) -> Option<efi::EventNotify> {
+        self.notify_function
+    }
+
+    pub fn notify_context(&self) -> Option<*mut c_void> {
+        self.notify_context
     }
 }
 
@@ -321,18 +337,12 @@ impl EventDb {
         let id = if runtime { self.next_event_id | Self::RT_EVENT } else { self.next_event_id };
         self.next_event_id += 1;
 
+        let event = Event::new(id, event_type, notify_tpl, notify_function, notify_context, event_group)?;
         if runtime {
-            // Runtime events are managed by the runtime module.
-            runtime::add_runtime_event(
-                id as efi::Event,
-                event_type,
-                notify_tpl,
-                notify_function,
-                event_group,
-                notify_context,
-            )?;
+            // Runtime events are managed by the runtime module to reduce dependencies
+            // on boot services.
+            runtime::add_runtime_event(event)?;
         } else {
-            let event = Event::new(id, event_type, notify_tpl, notify_function, notify_context, event_group)?;
             self.events.insert(id, event);
         }
 
@@ -342,7 +352,7 @@ impl EventDb {
     fn close_event(&mut self, event: efi::Event) -> Result<(), EfiError> {
         let id = event as usize;
         if (id & Self::RT_EVENT) != 0 {
-            runtime::remove_runtime_event(id as efi::Event)?;
+            runtime::remove_runtime_event(id)?;
         } else {
             self.events.remove(&id).ok_or(EfiError::InvalidParameter)?;
         }

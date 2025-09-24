@@ -4,7 +4,7 @@ resolver = "2"
 members = ["components/*", "core/*", "sdk/*", "patina_dxe_core"]
 
 [workspace.package]
-version = "14.4.2"
+version = "8.1.0"
 license = "Apache-2.0"
 edition = "2024"
 rust-version = "1.89"
@@ -31,23 +31,24 @@ linked_list_allocator = { version = "^0.10" }
 linkme = { version = "^0.3.29" }
 log = { version = "0.4", default-features = false }
 memoffset = {version = "0.9.1" }
-mu_pi = { version = "5.2.3" }
+mu_pi = { version = "6.0.0" }
 mu_rust_helpers = { version = "3.0.1" }
 num-traits = { version = "0.2", default-features = false }
-
-patina_acpi = {version = "6.0.0", path = "components/patina_acpi", registry = "patina-fw" }
-patina_debugger = { version = "6.0.0", path = "core/patina_debugger", registry = "patina-fw" }
-patina_internal_collections = { version = "6.0.0", path = "core/patina_internal_collections", default-features = false, registry = "patina-fw" }
-patina_internal_cpu = { version = "6.0.0", path = "core/patina_internal_cpu", registry = "patina-fw" }
-patina_internal_depex = { version = "6.0.0", path = "core/patina_internal_depex", registry = "patina-fw" }
-patina_internal_device_path = { version = "6.0.0", path = "core/patina_internal_device_path", registry = "patina-fw" }
+patina_acpi = {version = "8.1.0", path = "components/patina_acpi", registry = "patina-fw" }
+patina_debugger = { version = "8.1.0", path = "core/patina_debugger", registry = "patina-fw" }
+patina_internal_collections = { version = "8.1.0", path = "core/patina_internal_collections", default-features = false, registry = "patina-fw" }
+patina_internal_cpu = { version = "8.1.0", path = "core/patina_internal_cpu", registry = "patina-fw" }
+patina_internal_depex = { version = "8.1.0", path = "core/patina_internal_depex", registry = "patina-fw" }
+patina_internal_device_path = { version = "8.1.0", path = "core/patina_internal_device_path", registry = "patina-fw" }
+patina_lzma_rs = { version = "0.3.1", default-features = false, registry = "patina-fw" }
 patina_mtrr = { version = "1.0.0", registry = "patina-fw" }
-patina_paging = { version = "7.0.0", registry = "patina-fw" }
-patina_performance = { version = "1.0.1", path = "components/patina_performance", registry = "patina-fw" }
-patina_sdk = { version = "1.0.1", path = "sdk/patina_sdk", registry = "patina-fw" }
-patina_sdk_macro = { version = "1.0.1", path = "sdk/patina_sdk_macro", registry = "patina-fw" }
-patina_stacktrace = { version = "1.0.1", path = "core/patina_stacktrace", registry = "patina-fw" }
-patina_variables = { version = "1.0.1", path = "components/patina_variables", registry = "patina-fw" }
+patina_paging = { version = "8", registry = "patina-fw" }
+patina_performance = { version = "8.1.0", path = "components/patina_performance", registry = "patina-fw" }
+patina_sdk = { version = "8.1.0", path = "sdk/patina_sdk", registry = "patina-fw" }
+patina_ffs = { version = "8.1.0", path = "sdk/patina_ffs", registry = "patina-fw" }
+patina_ffs_extractors = { version = "8.1.0", path = "sdk/patina_ffs_extractors", registry = "patina-fw" }
+patina_sdk_macro = { version = "8.1.0", path = "sdk/patina_sdk_macro", registry = "patina-fw" }
+patina_stacktrace = { version = "8.1.0", path = "core/patina_stacktrace", registry = "patina-fw" }
 proc-macro2 = { version = "1" }
 quote = { version = "1" }
 r-efi = { version = "5.0.0", default-features = false }
@@ -68,11 +69,9 @@ env_logger = "0.11"
 mockall = { version = "0.13.0" }
 rand = { version = "0.8" }
 ruint = { version = "1" }
-serial_test = { version = "3.0" }
 winapi = { version = "0.3" }
-serde = { version = "1.0", default-features = false, features = ["derive"] }
+serde = { version = "1.0", features = ["derive"] }
 serde_yaml = { version = "0.9" }
-serde_json = { version = "1.0", default-features = false, features = ["alloc"] }
 lzma-rs = { version = "0.3" }
 
 [profile.release]

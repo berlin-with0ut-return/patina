@@ -27,10 +27,7 @@ impl super::EfiSystemContextFactory for ExceptionContextX64 {
 
 impl super::EfiExceptionStackTrace for ExceptionContextX64 {
     fn dump_stack_trace(&self) {
-        // SAFETY: This is called during an exception, we don't have any choice but to trust the exception context
-        // and the stack trace module will do its best to not cause a recursive exception
-        let stack_frame = StackFrame { pc: self.rip, sp: self.rsp, fp: self.rbp };
-        if let Err(err) = unsafe { StackTrace::dump_with(stack_frame) } {
+        if let Err(err) = unsafe { StackTrace::dump_with(self.rip, self.rsp) } {
             log::error!("StackTrace: {err}");
         }
     }

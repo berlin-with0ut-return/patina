@@ -260,8 +260,7 @@ images:
 
 `RUSTFLAGS=-Cforce-unwind-tables`
 
-To preserve stack data for C binaries, set the following flag in the platform
-DSC build-options section:
+In order to preserve stack data about C binaries, this needs to be set in the platform DSC's build options section:
 
 `*_*_*_GENFW_FLAGS   = --keepexceptiontable`
 

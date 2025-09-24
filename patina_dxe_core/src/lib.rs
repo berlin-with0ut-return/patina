@@ -6,17 +6,13 @@
 //! ## Examples
 //!
 //! ``` rust,no_run
-//! # use patina::component::prelude::*;
-//! # #[derive(IntoComponent, Default)]
-//! # struct ExampleComponent;
-//! # impl ExampleComponent {
-//! #     fn entry_point(self) -> patina::error::Result<()> { Ok(()) }
-//! # }
+//! # use patina_sdk::component::prelude::*;
+//! # fn example_component() -> patina_sdk::error::Result<()> { Ok(()) }
 //! # let physical_hob_list = core::ptr::null();
 //! patina_dxe_core::Core::default()
 //!   .init_memory(physical_hob_list)
 //!   .with_service(patina_ffs_extractors::CompositeSectionExtractor::default())
-//!   .with_component(ExampleComponent::default())
+//!   .with_component(example_component)
 //!   .start()
 //!   .unwrap();
 //! ```
@@ -31,6 +27,8 @@
 #![feature(alloc_error_handler)]
 #![feature(c_variadic)]
 #![feature(allocator_api)]
+#![feature(btreemap_alloc)]
+#![feature(slice_ptr_get)]
 #![feature(coverage_attribute)]
 
 extern crate alloc;
@@ -70,19 +68,21 @@ use core::{ffi::c_void, ptr, str::FromStr};
 use alloc::{boxed::Box, vec::Vec};
 use gcd::SpinLockedGcd;
 use memory_manager::CoreMemoryManager;
+use mu_pi::{
+    hob::{HobList, get_c_hob_list_size},
+    protocols::{bds, status_code},
+    status_code::{EFI_PROGRESS_CODE, EFI_SOFTWARE_DXE_CORE, EFI_SW_DXE_CORE_PC_HANDOFF_TO_NEXT},
+};
 use mu_rust_helpers::{function, guid::CALLER_ID};
-use patina::{
+use patina_ffs::section::SectionExtractor;
+use patina_internal_cpu::{cpu::EfiCpu, interrupts::Interrupts};
+use patina_sdk::{
     boot_services::StandardBootServices,
     component::{Component, IntoComponent, Storage, service::IntoService},
     error::{self, Result},
     performance::{
         logging::{perf_function_begin, perf_function_end},
         measurement::create_performance_measurement,
-    },
-    pi::{
-        hob::{HobList, get_c_hob_list_size},
-        protocols::{bds, status_code},
-        status_code::{EFI_PROGRESS_CODE, EFI_SOFTWARE_DXE_CORE, EFI_SW_DXE_CORE_PC_HANDOFF_TO_NEXT},
     },
     runtime_services::StandardRuntimeServices,
 };
@@ -181,17 +181,13 @@ pub struct NoAlloc;
 /// ## Examples
 ///
 /// ``` rust,no_run
-/// # use patina::component::prelude::*;
-/// # #[derive(IntoComponent, Default)]
-/// # struct ExampleComponent;
-/// # impl ExampleComponent {
-/// #     fn entry_point(self) -> patina::error::Result<()> { Ok(()) }
-/// # }
+/// # use patina_sdk::component::prelude::*;
+/// # fn example_component() -> patina_sdk::error::Result<()> { Ok(()) }
 /// # let physical_hob_list = core::ptr::null();
 /// patina_dxe_core::Core::default()
 ///   .init_memory(physical_hob_list)
 ///   .with_service(patina_ffs_extractors::CompositeSectionExtractor::default())
-///   .with_component(ExampleComponent::default())
+///   .with_component(example_component)
 ///   .start()
 ///   .unwrap();
 /// ```
@@ -288,8 +284,8 @@ impl Core<NoAlloc> {
     /// ## Example
     ///
     /// ``` rust,no_run
-    /// # use patina::component::prelude::*;
-    /// # fn example_component() -> patina::error::Result<()> { Ok(()) }
+    /// # use patina_sdk::component::prelude::*;
+    /// # fn example_component() -> patina_sdk::error::Result<()> { Ok(()) }
     /// # let physical_hob_list = core::ptr::null();
     /// patina_dxe_core::Core::default()
     ///   .prioritize_32_bit_memory()
@@ -520,9 +516,9 @@ impl Core<Alloc> {
     /// Registers core provided components
     #[allow(clippy::default_constructed_unit_structs)]
     fn add_core_components(&mut self) {
-        self.insert_component(0, decompress::DecompressProtocolInstaller::default().into_component());
-        self.insert_component(0, systemtables::SystemTableChecksumInstaller::default().into_component());
-        self.insert_component(0, cpu_arch_protocol::CpuArchProtocolInstaller::default().into_component());
+        self.insert_component(0, decompress::install_decompress_protocol.into_component());
+        self.insert_component(0, systemtables::register_checksum_on_protocol_install_events.into_component());
+        self.insert_component(0, cpu_arch_protocol::install_cpu_arch_protocol.into_component());
         #[cfg(all(target_os = "uefi", target_arch = "aarch64"))]
         self.insert_component(0, hw_interrupt_protocol::HwInterruptProtocolInstaller::default().into_component());
     }

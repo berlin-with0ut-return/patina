@@ -6,13 +6,13 @@
 //!
 //! SPDX-License-Identifier: Apache-2.0
 //!
-use patina::pi::fw_fs;
+use mu_pi::fw_fs;
 use patina_ffs::{
     FirmwareFileSystemError,
     section::{SectionExtractor, SectionHeader},
 };
 
-use patina::component::prelude::IntoService;
+use patina_sdk::component::prelude::IntoService;
 
 /// Provides extraction for CRC32 sections.
 #[derive(Default, Clone, Copy, IntoService)]

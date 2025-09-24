@@ -199,7 +199,19 @@ reference is the `SectionExtractor` trait used during firmware volume section de
 If your platform only requires (for example) Brotli decompression, you can supply just that implementation. Composite
 helpers are also available.
 
-Add representative initialization (replace or augment extractors to match platform requirements):
+`SectionExtractor` is an abstraction point that allows a platform to specify the specific section extraction methods it
+supports. As an example, a platform may only compress its sections with brotli, so it only needs to support brotli
+extractions. A platform may create their own extractor; it only needs to implement the
+[SectionExtractor](https://docs.rs/mu_pi/latest/mu_pi/fw_fs/trait.SectionExtractor.html) trait. However, multiple
+implementations are provided via [patina_ffs_extractors](https://github.com/OpenDevicePartnership/patina/tree/main/core/patina_ffs_extractors)
+such as brotli, crc32, etc.
+
+```admonish note
+If there are any new traits added, please submit a PR to update this documentation.
+```
+
+With all of that said, you can add the following code to `main.rs`, replacing the implementations in this example with
+your platform-specific implementations:
 
 ```rust
 # extern crate patina;
@@ -208,13 +220,13 @@ Add representative initialization (replace or augment extractors to match platfo
 # extern crate core;
 use core::ffi::c_void;
 use patina_dxe_core::Core;
-use patina_ffs_extractors::BrotliSectionExtractor;
+use patina_ffs_extractors::CompositeSectionExtractor;
 
 #[cfg_attr(target_os = "uefi", export_name = "efi_main")]
 pub extern "efiapi" fn _start(physical_hob_list: *const c_void) -> ! {
     Core::default()
         .init_memory(physical_hob_list)
-        .with_service(BrotliSectionExtractor::default())
+        .with_service(CompositeSectionExtractor::default())
         .start()
         .unwrap();
     loop {}
@@ -224,7 +236,7 @@ pub extern "efiapi" fn _start(physical_hob_list: *const c_void) -> ! {
 ```admonish note
 If you copy + paste this directly, the compiler will not know what `patina_ffs_extractors` is. You will have to add
 that crate to your platform's `Cargo.toml` file. Additionally, where the `Default::default()` option is, this is where
-you would provide any configuration to the Patina DXE Core.
+you would provide any configuration to the Patina DXE Core, similar to a PCD value.
 ```
 
 ## 6. Logging and Debugging
@@ -235,8 +247,14 @@ provides two logger implementations:
 - [`serial_logger`](https://github.com/OpenDevicePartnership/patina/blob/main/sdk/patina/src/log/serial_logger.rs)
 - [`patina_adv_logger`](https://github.com/OpenDevicePartnership/patina/tree/main/components/patina_adv_logger)
 
-Select or implement a logger early to obtain diagnostic output during bring‑up. Configure UART parameters for your
-target (MMIO vs I/O space). Below are platform patterns.
+The DXE Core uses the same logger interface as [log](https://crates.io/crates/log), so if you wish to create your own
+logger, follow those steps. We currently provide two loggers:
+
+- [patina_adv_logger](https://github.com/OpenDevicePartnership/patina/tree/main/components/patina_adv_logger)
+- [serial_logger](https://github.com/OpenDevicePartnership/patina/blob/main/sdk/patina_sdk/src/log/serial_logger.rs)
+
+For this tutorial, we will use the more complex `patina_adv_logger` as it will show you how to add a `Component` to the
+Patina DXE Core.
 
 ### 6.1 Logger Configuration Examples
 
@@ -244,11 +262,9 @@ In this example, we will talk about how to configure the loggers provided by Pat
 `AdvancedLogger` both have the same `new` method interface, so we will pick one for this example:
 
 ```rust
-# extern crate patina;
-# extern crate log;
-use patina::serial::uart::UartNull; // UartPl011 (AARCH64) and Uart16550 (X64) exist
-use patina::log::{Format, SerialLogger};
-use log::LevelFilter;
+use patina_dxe_core::Core;
+use patina_ffs_extractors::CompositeSectionExtractor;
+use patina_adv_logger::{component::AdvancedLoggerComponent, logger::AdvancedLogger};
 
 const LOGGER: SerialLogger<UartNull> = SerialLogger::new(
     Format::Standard, // The style to log in - standard, json, verbose json
@@ -315,21 +331,25 @@ pub extern "efiapi" fn _start(physical_hob_list: *const c_void) -> ! {
 
     Core::default()
         .init_memory(physical_hob_list)
-        .with_service(BrotliSectionExtractor::default())
+        .with_service(CompositeSectionExtractor::default())
+        .with_component(adv_logger_component)
         .start()
         .unwrap();
     loop {}
 }
 ```
 
-Note:
+This does a few things. The first is it creates our actual logger (as a static), with some configuration settings.
+Specifically it sets the log message format, disables logging for a few modules, sets the minimum log type allowed,
+then specifies the Writer that we want to write to. In this case we are writing to port `0x402` via `Uart16550`. Your
+platform may require a different writer.
 
-- The logger is created as a static instance configured for your platform's UART.
-  - In this case we are writing to the Host-based STD Terminal. Your platform will require a different writer.
-- Inside `efi_main` we set the global logger to our static logger with the `log` crate and set the maximum log level.
-- The `serial_logger` provides a simple, lightweight logging solution that writes directly to the serial port.
+Next, inside `efi_main` we instantiate the advanced logger component, which will be executed by the core at runtime.
+Among other things, this component produces the Advanced Logger Protocol, so that other standard UEFI drivers may
+consume and use it.
 
-## 7. Platform Components and Services
+Finally, we set the global logger to our static logger with the `log` crate and then register the component instance
+with the core, so that it knows to execute it.
 
 Patina uses dependency injection in the dispatch process (see [Component Interface](../component/interface.md)) to
 execute components only when their declared parameters (services, configs, HOBs, etc.) are satisfiable.
@@ -438,9 +458,8 @@ crate when supported by the target architecture.
 
 use core::{ffi::c_void, panic::PanicInfo};
 use patina_dxe_core::Core;
-use patina_ffs_extractors::BrotliSectionExtractor;
-use patina::log::{Format, SerialLogger};
-use patina::serial::uart::UartNull; // Uart16550 or UartPl011 exist
+use patina_ffs_extractors::CompositeSectionExtractor;
+use patina_sdk::{log::Format, serial::uart::Uart16550};
 use patina_stacktrace::StackTrace;
 extern crate alloc;
 
@@ -483,7 +502,8 @@ pub extern "efiapi" fn _start(physical_hob_list: *const c_void) -> ! {
 
     Core::default()
         .init_memory(physical_hob_list)
-        .with_service(BrotliSectionExtractor::default())
+        .with_service(CompositeSectionExtractor::default())
+        .with_component(adv_logger_component)
         .start()
         .unwrap();
 
@@ -692,89 +712,18 @@ component coverage, and tightening security controls.
 
 ---
 
-## How Does This All Work with EDK II?
+> Note: The Patina QEMU documentation provides an overview of where binary size comes from, and how to reduce it using the
+Patina QEMU DXE Core binary as an example. You can find those details in
+[Patina DXE Core Release Binary Composition and Size Optimization](https://github.com/OpenDevicePartnership/patina-qemu/blob/main/Platforms/Docs/Common/patina_dxe_core_release_binary_size.md).
 
-Since a lot of developers will be visiting Patina that are familiar with EDK II, this section is intended to help those
-developers understand how the Patina DXE Core is configured and integrated with common EDK II configuration points.
+### 32 bit memory compatibility
 
-The Patina DXE Core build is intentionally separated from the EDK II build process. The Patina DXE Core build is
-meant to be performed in a standalone pure-Rust workspace. The output of that build is a single `.efi` binary that is
-then integrated into the EDK II build process as a binary file.
-
-The Patina DXE Core replaces the C DXE Core binary. At a minimum, this results in the C DXE Core being removed from the
-platform build process and flash file. At this time `CpuDxe` is also brought into the Patina DXE Core too, for example,
-and can be removed from the platform. However, because the Patina DXE Core is a monolithic binary, it also means
-that as it increases the number of components and services it provides, the need for additional C components and
-services decreases. Over time, fewer C modules will be required by the platform as their functionality is replaced by
-equivalent code in the Patina DXE Core.
-
-Library classes and PCDs are project-specific configuration points in EDK II. These are not supported in Patina. They
-continue to work as-is for C code and the many C-based modules built in the platform, but they do not influence the
-Patina DXE Core. Therefore, a platform does not need to change how configuration is done for their C code, but it must
-be understood how configuration is performed for the Patina DXE Core.
-
-Patina components take configuration input in two primary ways - through Patina configuration structures and through
-HOBs. Platforms can populate these data structures from any source, including EDK II PCDs, platform configuration
-files, or hardcoded values.
-
-In Patina, we use [Traits](https://blog.rust-lang.org/2015/05/11/traits.html) for abstractions and
-[Crates](https://doc.rust-lang.org/book/ch07-01-packages-and-crates.html) for code reuse. To learn how to use these,
-review the [Abstractions](../dev/principles/abstractions.md) and [Code reuse](../dev/principles/reuse.md) sections.
-
-## Why Isn't Patina Built as Part of the EDK II Build?
-
-First and foremost, Patina is a Rust project. It is a pivot to not only Rust but modern software engineering practices
-that are common to a much broader set of developers than EDK II-specific processes and conventions and may not be
-acceptable within the EDK II community. Patina seeks to engage closely with the broader Rust ecosystem and reduce
-barriers to Rust developers getting involved in the project that have no need to understand EDK II.
-
-Initially, the Patina DXE was actually built in the EDK II build process. In the end, this negatively impacted both
-the EDK II and Patina/Rust experience.
-
-The Patina DXE Core is built outside of the EDK II build process for several reasons:
-
-1. **Simplicity**: The Rust build system (`cargo`) is significantly simpler than the EDK II build system. It is
-   standardized, well documented, and well understood by the broader Rust community.
-2. **Competing Build Systems**: The EDK II build system is not designed to handle Rust code. While it is possible to
-   integrate Rust into the EDK II build system (and that has been done), it is not a first-class citizen and requires
-   significant custom configuration. This adds complexity and maintenance overhead to the overall EDK II project and
-   Rust developers that have no need for EDK II. For example, EDK II uses INF files to describe dependencies and
-   resources used in the module that are resolved through a custom autogen system. Rust uses `Cargo.toml` files to
-   describe dependencies and resources that are resolved through the `cargo` tool. These two systems are fundamentally
-   different and work most effectively for their individual use cases.
-3. **Competing Ways of Sharing Code**: We have found using crates on a registry is essential for efficient code sharing
-   in Rust. EDK II does not have a similar concept. Tangling C and Rust code in repos introduces the potential for
-   referencing Rust code in a C repo through a `cargo` git dependency or a path dependency. This prevents semantic
-   versioning from being used as is available with crate dependencies. Semantic versioning is crucial for effectively
-   having `cargo` resolve dependencies in a way that is sustainable. Placing Rust code in C repos has also resulted in
-   dependencies being established like a path dependency to code in a submodule. This adds significant complexity to
-   the overall and is unnecessary when working in Rust.
-4. **Workspace Layout**: EDK II lays out workspaces a in specific way and Rust lays out workspaces a different way.
-   While it is possible to make them work together (and we have), neither follows their natural conventions and adds a
-   a lot of unnecessary bloat to the project. It is important for both that the workspace layout is organized a certain
-   way as the layout has consequences on how the build systems work and code is written.
-5. **Toolchain Overload**: It is frustrating for Rust developers to maintain and use C toolchains and build systems when
-   they have no need for them. It is also frustrating for C developers to maintain and use Rust toolchains and build
-   systems when they have no need for them. By separating the build systems, we can allow each group to focus on their
-   own tools and processes without needing to understand the other.
-
-In addition, `cargo` also simply builds Rust code fast and directly targets different scenarios like only build unit
-tests, documentation, examples, benchmarks, etc. Developers can get results for these within seconds. The EDK II
-build system simply serves an entirely different purpose than `cargo` and the Rust development model.
-
-## How Do I Integrate the Patina DXE Core into My EDK II Platform?
-
-The platform owner sets up a Rust workspace for their platform's Patina DXE Core. This workspace is separate from the
-EDK II workspace. The platform owner then configures the Patina DXE Core for their platform as described in this guide.
-Once the Patina DXE Core is built, the resulting `.efi` binary is referenced in the platform FDF file as a binary file
-to be included in the firmware volume.
-
-**Aren't two builds more inefficient than one?** No. It is much faster to iterate and build the Rust code with Rust
-tools. Building a flash image requires a full EDK II build anyway so the fact that the Patina DXE Core binary is built
-separately does not add any additional overhead.
-
-```admonish note
-Patina also has a [patching tool](https://github.com/OpenDevicePartnership/patina-fw-patcher) that can patch and run
-Patina changes in seconds on QEMU. Separating the builds allows flows like this to be used that significantly speed up
-development and testing.
-```
+By default, the Patina core will prioritize using high memory. This has proven
+beneficial in catching bugs in many different external components which did not properly
+handle 64 bit addresses in all cases. It is recommended that platforms leave this default
+behavior. However, for platforms that must support this buggy software the core
+exposes a `prioritize_32_bit_memory()` option on it's pre-memory phase. When this
+configuration is set, the core will attempt to prioritize 32 bit addressable allocations
+first. For platforms that decide to use this option, it is still a good idea to leave
+the default allocation scheme on debug or development builds to catch address width
+bugs during development.

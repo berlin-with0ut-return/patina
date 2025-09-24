@@ -52,15 +52,10 @@ impl<'a> RuntimeFunction<'a> {
         Self { image_base, image_name, start_rva, end_rva, unwind_info }
     }
 
-    /// Parses the unwind info referenced by this runtime function entry.
+    /// Parse the Unwind Info data pointed by RuntimeFunction
     pub fn get_unwind_info(&self) -> StResult<UnwindInfo<'_>> {
-        UnwindInfo::parse(&self.image_base[self.unwind_info as usize..], self.image_name).map_err(|_| {
-            Error::UnwindInfoNotFound {
-                module: self.image_name,
-                image_base: self.image_base.as_ptr() as u64,
-                unwind_info: self.unwind_info,
-            }
-        })
+        UnwindInfo::parse(&self.image_base[self.unwind_info as usize..], self.image_name)
+            .map_err(|_| Error::UnwindInfoNotFound(self.image_name, self.image_base.as_ptr() as u64, self.unwind_info))
     }
 
     /// Finds the runtime function corresponding to the given relative RIP.

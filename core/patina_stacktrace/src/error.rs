@@ -77,8 +77,11 @@ impl fmt::Display for Error {
     fn fmt(&self, fmt: &mut fmt::Formatter) -> fmt::Result {
         let no_module_str = "<no module>";
         match self {
-            Error::OutOfBoundsRead { index, .. } => {
-                write!(fmt, "Attempted to read past buffer bounds at index {index}")
+            Error::BufferTooShort(index) => write!(fmt, "Buffer is too short {index}"),
+            Error::BufferUnaligned(addr) => write!(fmt, "Buffer is not aligned {addr:X}"),
+            Error::Malformed(msg) => write!(fmt, "Malformed entity: {msg}"),
+            Error::ImageNotFound(rva) => {
+                write!(fmt, "Failed to locate a PE Image in memory with rip: {rva:X}")
             }
             Error::Malformed { reason, .. } => write!(fmt, "Malformed entity: {reason}"),
             Error::ImageNotFound { rip } => {

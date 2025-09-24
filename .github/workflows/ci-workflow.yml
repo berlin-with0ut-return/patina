@@ -19,14 +19,14 @@ on:
   workflow_dispatch:
   push:
     branches:
-      - main
-      - major
-      - feature/**/*
+      - "main"
+      - "major"
+      - "feature/**/*"
   pull_request:
     branches:
-      - main
-      - major
-      - feature/**/*
+      - "main"
+      - "major"
+      - "feature/**/*"
 
 jobs:
   ci_workflow:

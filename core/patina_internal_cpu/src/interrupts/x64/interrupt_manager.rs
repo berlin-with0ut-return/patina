@@ -56,7 +56,16 @@ impl InterruptsX64 {
 
 impl InterruptManager for InterruptsX64 {}
 
-#[coverage(off)]
+/// Handler for double faults.
+///
+/// Handler for doubel faults that is configured to run as a direct interrupt
+/// handler without using the normal handler assembly or stack. This is done to
+/// increase the diagnosability of faults in the interrupt handling code.
+///
+extern "x86-interrupt" fn double_fault_handler(stack_frame: InterruptStackFrame, _error_code: u64) -> ! {
+    panic!("EXCEPTION: DOUBLE FAULT\n{stack_frame:#x?}");
+}
+
 /// Default handler for GP faults.
 extern "efiapi" fn general_protection_fault_handler(_exception_type: isize, context: EfiSystemContext) {
     // SAFETY: We don't have any choice here, we are in an exception and have to do our best
@@ -77,13 +86,9 @@ extern "efiapi" fn general_protection_fault_handler(_exception_type: isize, cont
 
     log::error!("");
 
-    (x64_context as &ExceptionContextX64).dump_system_context_registers();
+    log::debug!("Full Context: {x64_context:#x?}");
 
-    log::error!("Dumping Exception Stack Trace:");
-    // SAFETY: As before, we don't have any choice. The stacktrace module will do its best to not cause a
-    // recursive exception.
-    let stack_frame = StackFrame { pc: x64_context.rip, sp: x64_context.rsp, fp: x64_context.rbp };
-    if let Err(err) = unsafe { StackTrace::dump_with(stack_frame) } {
+    if let Err(err) = unsafe { StackTrace::dump_with(x64_context.rip, x64_context.rsp) } {
         log::error!("StackTrace: {err}");
     }
 
@@ -117,23 +122,65 @@ extern "efiapi" fn page_fault_handler(_exception_type: isize, context: EfiSystem
     let paging_type =
         { if x64_context.cr4 & (1 << 12) != 0 { PagingType::Paging5Level } else { PagingType::Paging4Level } };
 
-    // SAFETY: CR3 and the paging type are correct as they are from the current context.
-    unsafe { dump_pte(x64_context.cr2, x64_context.cr3, paging_type) };
+    if let Some(attrs) = get_fault_attributes(x64_context.cr2, x64_context.cr3, paging_type) {
+        log::error!("Page Attributes: {attrs:?}");
+    }
 
-    log::error!("Dumping Exception Stack Trace:");
-    // SAFETY: As before, we don't have any choice. The stacktrace module will do its best to not cause a
-    // recursive exception.
-    let stack_frame = StackFrame { pc: x64_context.rip, sp: x64_context.rsp, fp: x64_context.rbp };
-    if let Err(err) = unsafe { StackTrace::dump_with(stack_frame) } {
+    log::error!(
+        "General-Purpose Registers\n \
+                RAX: {:x?}\n \
+                RBX: {:x?}\n \
+                RCX: {:x?}\n \
+                RDX: {:x?}\n \
+                RSI: {:x?}\n \
+                RDI: {:x?}\n \
+                RBP: {:x?}\n \
+                R8: {:x?}\n \
+                R9: {:x?}\n \
+                R10: {:x?}\n \
+                R11: {:x?}\n \
+                R12: {:x?}\n \
+                R13: {:x?}\n \
+                R14: {:x?}\n \
+                R15: {:x?}",
+        x64_context.rax,
+        x64_context.rbx,
+        x64_context.rcx,
+        x64_context.rdx,
+        x64_context.rsi,
+        x64_context.rdi,
+        x64_context.rbp,
+        x64_context.r8,
+        x64_context.r9,
+        x64_context.r10,
+        x64_context.r11,
+        x64_context.r12,
+        x64_context.r13,
+        x64_context.r14,
+        x64_context.r15
+    );
+
+    log::debug!("Full Context: {x64_context:#x?}");
+
+    if let Err(err) = unsafe { StackTrace::dump_with(x64_context.rip, x64_context.rsp) } {
         log::error!("StackTrace: {err}");
     }
 
     panic!("EXCEPTION: PAGE FAULT");
 }
 
-#[coverage(off)]
+/// Gets the address of the assembly entry point for the given vector index.
+fn get_vector_address(index: usize) -> VirtAddr {
+    // Verify the index is in [0-255]
+    if index >= 256 {
+        panic!("Invalid vector index! 0x{index:x}");
+    }
+
+    unsafe { VirtAddr::from_ptr(AsmGetVectorAddress(index) as *const ()) }
+}
+
 fn interpret_page_fault_exception_data(exception_data: u64) {
-    log::error!("Error Code: {exception_data:#X?}");
+    log::error!("Error Code: 0x{exception_data:x}\n");
     if (exception_data & 0x1) == 0 {
         log::error!("Page not present");
     } else {
@@ -164,7 +211,7 @@ fn interpret_page_fault_exception_data(exception_data: u64) {
 // There is no value in coverage for this function.
 #[coverage(off)]
 fn interpret_gp_fault_exception_data(exception_data: u64) {
-    log::error!("Error Code: {exception_data:#X?}");
+    log::error!("Error Code: 0x{exception_data:x}\n");
     if (exception_data & 0x1) != 0 {
         log::error!("Invalid segment");
     }

@@ -323,10 +323,22 @@ impl CommunicateBuffer {
         self.buffer.as_ptr().cast::<u8>()
     }
 
-    /// Resets the communication buffer by clearing all data and resetting internal state.
-    pub fn reset(&mut self) {
-        // Zero out the entire buffer
-        self.as_slice_mut().fill(0);
+    /// Sets the data message used for communication with the MM handler.
+    ///
+    /// ## Parameters
+    ///
+    /// - `message`: The message to be sent to the MM handler. The message length in the communicate header is
+    ///   set to the length of this slice.
+    pub fn set_message(&mut self, message: &[u8]) -> Result<(), CommunicateBufferStatus> {
+        if message.len() > self.message_capacity() {
+            return Err(CommunicateBufferStatus::TooSmallForMessage);
+        }
+        let recipient = if let Some(recipient) = self.recipient {
+            recipient
+        } else {
+            return Err(CommunicateBufferStatus::InvalidRecipient);
+        };
+        self.message_length = message.len();
 
         // Reset internal state
         self.private_message_length = 0;
@@ -592,15 +604,6 @@ impl fmt::Debug for MmiPort {
     }
 }
 
-impl fmt::Display for MmiPort {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        match self {
-            MmiPort::Smi(value) => write!(f, "SMI(0x{value:04X})"),
-            MmiPort::Smc(value) => write!(f, "SMC(0x{value:08X})"),
-        }
-    }
-}
-
 /// ACPI Base Address
 ///
 /// Represents the base address for ACPI MMIO or IO ports. This is the address used to access the ACPI Fixed hardware
@@ -618,15 +621,6 @@ impl fmt::Debug for AcpiBase {
         match self {
             AcpiBase::Mmio(addr) => write!(f, "AcpiBase::Mmio(0x{addr:X})"),
             AcpiBase::Io(port) => write!(f, "AcpiBase::Io(0x{port:04X})"),
-        }
-    }
-}
-
-impl fmt::Display for AcpiBase {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        match self {
-            AcpiBase::Mmio(addr) => write!(f, "MMIO(0x{addr:X})"),
-            AcpiBase::Io(port) => write!(f, "IO(0x{port:04X})"),
         }
     }
 }

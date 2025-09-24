@@ -440,12 +440,12 @@ fn apply_image_memory_protections(pe_info: &UefiPeInfo, private_info: &PrivateIm
             "Applying image memory protections on {section_base_addr:#X} for len {aligned_virtual_size:#X} with attributes {attributes:#X}",
         );
 
-        dxe_services::core_set_memory_space_attributes(section_base_addr, aligned_virtual_size, attributes)
-            .inspect_err(|status| {
-                log::error!(
-                    "Failed to set GCD attributes for image section {section_base_addr:#X} with Status {status:#X?}",
-                );
-            })?;
+        match dxe_services::core_set_memory_space_attributes(section_base_addr, aligned_virtual_size, attributes) {
+            Ok(_) => continue,
+            Err(status) => log::error!(
+                "Failed to set GCD attributes for image section {section_base_addr:#X} with Status {status:#X?}",
+            ),
+        }
     }
     Ok(())
 }
@@ -1225,13 +1225,10 @@ extern "efiapi" fn start_image(
         let private_data = PRIVATE_IMAGE_DATA.lock();
         if let Some(image_data) = private_data.private_image_data.get(&image_handle)
             && let Some(image_exit_data) = image_data.exit_data
-            && !exit_data_size.is_null()
-            && !exit_data.is_null()
         {
-            // Safety: Caller must ensure that exit_data_size and exit_data are valid pointers if they are non-null.
             unsafe {
-                exit_data_size.write_unaligned(image_exit_data.0);
-                exit_data.write_unaligned(image_exit_data.1);
+                exit_data_size.write(image_exit_data.0);
+                exit_data.write(image_exit_data.1);
             }
         }
     }

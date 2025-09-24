@@ -110,7 +110,7 @@ unsafe impl SwMmiTrigger for SwMmiManager {
                 log::trace!(target: "sw_mmi", "Using SMI command port: 0x{:04X}", _port);
                 cfg_if::cfg_if! {
                     if #[cfg(any(feature = "doc", all(target_os = "uefi", target_arch = "x86_64")))] {
-                        log::trace!(target: "sw_mmi", "Writing SMI command port: {_port:#X}");
+                        log::trace!("Writing SMI command port: {_port:#X}");
                         unsafe { port::Port::new(_port).write(_cmd_port_value); }
                         log::trace!(target: "sw_mmi", "SMI command port write completed");
                     } else {
@@ -130,7 +130,7 @@ unsafe impl SwMmiTrigger for SwMmiManager {
                 log::trace!(target: "sw_mmi", "Using SMI data port: 0x{:04X}", _port);
                 cfg_if::cfg_if! {
                     if #[cfg(any(feature = "doc", all(target_os = "uefi", target_arch = "x86_64")))] {
-                        log::trace!(target: "sw_mmi", "Writing SMI data port: {_port:#X}");
+                        log::trace!("Writing SMI data port: {_port:#X}");
                         unsafe { port::Port::new(_port).write(_data_port_value); }
                         log::trace!(target: "sw_mmi", "SMI data port write completed");
                     } else {

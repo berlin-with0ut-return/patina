@@ -51,7 +51,9 @@ words:
   - coverity
   - cpuid
   - ctypes
-  - cuviper
+  - ruint
+  - dbgwcr
+  - dbgwvr
   - deassertion
   - depex
   - deque
@@ -60,7 +62,6 @@ words:
   - dllcharacteristics
   - dnested
   - docsrs
-  - dtolnay
   - dword
   - dxefv
   - dxeipl
@@ -72,7 +73,6 @@ words:
   - epage
   - fastrlp
   - fnent
-  - funty
   - fvmain
   - gantt
   - gdbstub
@@ -80,8 +80,6 @@ words:
   - getrsp
   - getsp
   - gigantor
-  - gnullvm
-  - gohman
   - granularities
   - grcov
   - gread
@@ -104,7 +102,6 @@ words:
   - libyaml
   - linkme
   - longjmp
-  - lrpair
   - lzmatest
   - mdbook
   - mdscr
@@ -133,7 +130,6 @@ words:
   - pacibsp
   - pccard
   - pcddxe
-  - pcide
   - pdata
   - pdbaltpath
   - pdbhelper
@@ -160,8 +156,6 @@ words:
   - sysreg
   - tiano
   - tianocore
-  - tolnay
-  - typenum
   - typer
   - uefiext
   - uintn

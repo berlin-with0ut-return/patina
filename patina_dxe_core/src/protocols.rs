@@ -30,7 +30,7 @@ pub fn core_install_protocol_interface(
     protocol: efi::Guid,
     interface: *mut c_void,
 ) -> Result<efi::Handle, EfiError> {
-    log::info!("InstallProtocolInterface: {:?} @ {:#x?}", guid_fmt!(protocol), interface);
+    log::debug!("InstallProtocolInterface: {:?} @ {:#x?}", guid_fmt!(protocol), interface);
     let (handle, notifies) = PROTOCOL_DB.install_protocol_interface(handle, protocol, interface)?;
 
     let mut closed_events = Vec::new();
@@ -77,7 +77,7 @@ pub fn core_uninstall_protocol_interface(
     protocol: efi::Guid,
     interface: *mut c_void,
 ) -> Result<(), EfiError> {
-    log::info!("UninstallProtocolInterface: {:?} @ {:#x?}", guid_fmt!(protocol), interface);
+    log::debug!("UninstallProtocolInterface: {:?} @ {:#x?}", guid_fmt!(protocol), interface);
 
     // Check if the handle/protocol/interface triple is legitimate
     match PROTOCOL_DB.get_interface_for_handle(handle, protocol) {
@@ -168,8 +168,7 @@ extern "efiapi" fn uninstall_protocol_interface(
         return efi::Status::INVALID_PARAMETER;
     }
 
-    // Safety: Caller must ensure that protocol is a valid pointer. It is null-checked above.
-    let caller_protocol = unsafe { protocol.read_unaligned() };
+    let caller_protocol = *(unsafe { protocol.as_mut().expect("previously null-checked pointer is null") });
 
     core_uninstall_protocol_interface(handle, caller_protocol, interface)
         .map(|_| efi::Status::SUCCESS)
@@ -448,14 +447,7 @@ extern "efiapi" fn close_protocol(
         }
     };
 
-    match PROTOCOL_DB.remove_protocol_usage(
-        handle,
-        // Safety: Caller must ensure that protocol is a valid pointer. It is null-checked above.
-        unsafe { protocol.read_unaligned() },
-        Some(agent_handle),
-        controller_handle,
-        None,
-    ) {
+    match PROTOCOL_DB.remove_protocol_usage(handle, unsafe { *protocol }, Some(agent_handle), controller_handle, None) {
         Err(err) => err.into(),
         Ok(_) => efi::Status::SUCCESS,
     }
@@ -527,7 +519,7 @@ unsafe extern "C" fn install_multiple_protocol_interfaces(handle: *mut efi::Hand
                 interface as *const efi::protocols::device_path::Protocol,
             )
             && PROTOCOL_DB.validate_handle(handle).is_ok()
-            && unsafe { is_device_path_end(remaining_path) }
+            && is_device_path_end(remaining_path)
         {
             return efi::Status::ALREADY_STARTED;
         }
