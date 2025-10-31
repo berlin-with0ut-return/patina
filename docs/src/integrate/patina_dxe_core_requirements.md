@@ -1,9 +1,13 @@
 # Patina Requirements
 
 The Patina DXE Core has several functional and implementation differences from the
-[Platform Initialization (PI) Spec](https://uefi.org/specifications) and EDK II DXE Core implementation.
+[Platform Initialization (PI) Spec](https://uefi.org/specifications) and
+[EDK II DXE Core](https://github.com/tianocore/edk2/tree/HEAD/MdeModulePkg/Core/Dxe) implementation.
 
-The Patina DXE Readiness Tool validates many of these requirements.
+- The [Patina Readiness Tool](https://github.com/OpenDevicePartnership/patina-readiness-tool) validates many of these
+  requirements.
+- The [Patina DXE Core Requirements Platform Checklist](patina_dxe_core_requirements_checklist.md) provides an easy
+  way for platform integrators to track if they have met all requirements.
 
 ## Platform Requirements
 
