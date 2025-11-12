@@ -203,8 +203,8 @@ calls into boot services which are implemented in the DXE Core on a Q35 QEMU pla
 to show that while DXE drivers written in C are still dispatched and used during boot, the core services invoked
 and depended on by those drivers are written in Rust.
 
-| ![UEFI Boot Services Call Count 1](./media/bootserv_call_table_1.png) | ![UEFI Boot Services Call Count 2](./media/bootserv_call_table_2.png)  |
-|---|---|
+| ![UEFI Boot Services Call Count 1](./media/bootserv_call_table_1.png) | ![UEFI Boot Services Call Count 2](./media/bootserv_call_table_2.png) |
+| --------------------------------------------------------------------- | --------------------------------------------------------------------- |
 
 #### Rust DXE Scaling Plan
 
@@ -300,3 +300,12 @@ dereference detection and stack guard are active so code (C DXE driver or a thir
 protection violations caught at runtime.
 
 For more details about mememory management in Patina see [Memory Management](./dxe_core/memory_management.md).
+
+#### Performance
+
+The performance numbers below are provided as of Patina v14.4.2, using the C implementation as a reference for
+DXE core execution times.
+
+**X64**: +9.14%
+
+**AARCH64**:
