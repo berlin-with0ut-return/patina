@@ -27,7 +27,7 @@ use patina::{
         service::{IntoService, Service, memory::MemoryManager},
     },
     efi_types::EfiMemoryType,
-    uefi_pages_to_size,
+    uefi_size_to_pages,
 };
 
 use crate::{
@@ -399,8 +399,6 @@ where
         // Checksum root tables after modifying fields.
         self.checksum_common_tables()?;
 
-        self.acpi_tables.write().insert(Self::FADT_KEY, fadt_info);
-
         Ok(Self::FADT_KEY)
     }
 
@@ -431,11 +429,11 @@ where
         // For simplicity, we use a monotonically increasing key.
         let curr_key = TableKey(self.next_table_key.fetch_add(1, Ordering::AcqRel));
 
-        // Add the table to the internal hashmap of installed tables.
-        self.acpi_tables.write().insert(curr_key, table_info);
-
         // Recalculate checksum for the newly installed table.
         table_info.update_checksum(ACPI_CHECKSUM_OFFSET)?;
+
+        // Add the table to the internal hashmap of installed tables.
+        self.acpi_tables.write().insert(curr_key, table_info);
 
         // Get the physical address of the table for the XSDT entry.
         let physical_addr = table_info.as_ptr() as u64;
@@ -499,7 +497,7 @@ where
                 .get()
                 .ok_or(AcpiError::ProviderNotInitialized)?
                 .allocate_pages(
-                    uefi_pages_to_size!(num_bytes_new),
+                    uefi_size_to_pages!(num_bytes_new),
                     patina::component::service::memory::AllocationOptions::new()
                         .with_memory_type(EfiMemoryType::ACPIReclaimMemory),
                 )
@@ -520,7 +518,7 @@ where
                 self.memory_manager
                     .get()
                     .ok_or(AcpiError::ProviderNotInitialized)?
-                    .free_pages(xsdt_data.slice.as_ptr() as usize, uefi_pages_to_size!(num_bytes_original))
+                    .free_pages(xsdt_data.slice.as_ptr() as usize, uefi_size_to_pages!(num_bytes_original))
                     .map_err(|_e| AcpiError::FreeFailed)
             }?;
 
@@ -583,7 +581,7 @@ where
                     self.memory_manager
                         .get()
                         .ok_or(AcpiError::ProviderNotInitialized)?
-                        .free_pages(physical_addr as usize, uefi_pages_to_size!(mem::size_of::<AcpiFacs>()))
+                        .free_pages(physical_addr as usize, uefi_size_to_pages!(mem::size_of::<AcpiFacs>()))
                         .map_err(|_| AcpiError::FreeFailed)
                 }?;
 
@@ -988,7 +986,7 @@ mod tests {
             .get()
             .unwrap()
             .allocate_pages(
-                uefi_pages_to_size!(byte_size),
+                uefi_size_to_pages!(byte_size),
                 AllocationOptions::new().with_memory_type(EfiMemoryType::ACPIReclaimMemory),
             )
             .unwrap();
