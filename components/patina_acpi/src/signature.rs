@@ -7,35 +7,36 @@
 //!
 //! Copyright (C) Microsoft Corporation.
 //!
-//! SPDX-License-Identifier: BSD-2-Clause-Patent
+//! SPDX-License-Identifier: Apache-2.0
 
 use core::mem;
 
+use patina::signature;
 use r_efi::efi;
 
 use crate::acpi_table::{AcpiDsdt, AcpiFacs, AcpiFadt, AcpiTableHeader};
 
 // Helpers for handling ACPI signatures
 
-pub const FACS: u32 = 0x53434146;
-pub const UEFI: u32 = 0x49464555;
-pub const FACP: u32 = 0x50434146;
-pub const DSDT: u32 = 0x54445344;
-pub const XSDT: u32 = 0x54445358;
+pub const FACS: u32 = signature!('F', 'A', 'C', 'S');
+pub const UEFI: u32 = signature!('U', 'E', 'F', 'I');
+pub const FACP: u32 = signature!('F', 'A', 'C', 'P');
+pub const DSDT: u32 = signature!('D', 'S', 'D', 'T');
+pub const XSDT: u32 = signature!('X', 'S', 'D', 'T');
 pub const FADT: u32 = FACP; // For legacy ACPI reasons, the FADT has signature 'FACP'.
-pub const MADT: u32 = 0x5444414D;
-pub const HPET: u32 = 0x54455048;
-pub const MCFG: u32 = 0x4746434D;
-pub const BGRT: u32 = 0x54475242;
+pub const MADT: u32 = signature!('M', 'A', 'D', 'T');
+pub const HPET: u32 = signature!('H', 'P', 'E', 'T');
+pub const MCFG: u32 = signature!('M', 'C', 'F', 'G');
+pub const BGRT: u32 = signature!('B', 'G', 'R', 'T');
 
 pub const ACPI_TABLE_GUID: efi::Guid =
     efi::Guid::from_fields(0x8868E871, 0xE4F1, 0x11D3, 0xBC, 0x22, &[0x00, 0x80, 0xC7, 0x3C, 0x88, 0x81]);
 
-pub(crate) const ACPI_HEADER_LEN: usize = 36;
+pub(crate) const ACPI_HEADER_LEN: usize = mem::size_of::<AcpiTableHeader>();
 pub(crate) const MAX_INITIAL_ENTRIES: usize = 32;
 pub(crate) const ACPI_CHECKSUM_OFFSET: usize = memoffset::offset_of!(AcpiTableHeader, checksum);
 
-pub const ACPI_RSDP_TABLE: u64 = 0x2052545020445352;
+pub const ACPI_RSDP_TABLE: u64 = signature!('R', 'S', 'D', ' ', 'P', 'T', 'R', ' ');
 pub const ACPI_RSDP_REVISION: u8 = 2;
 
 pub const ACPI_XSDT_REVISION: u8 = 1;

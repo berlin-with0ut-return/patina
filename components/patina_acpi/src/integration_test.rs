@@ -6,7 +6,7 @@
 //!
 //! Copyright (C) Microsoft Corporation.
 //!
-//! SPDX-License-Identifier: BSD-2-Clause-Patent
+//! SPDX-License-Identifier: Apache-2.0
 
 use core::{ffi::c_void, mem};
 
@@ -51,7 +51,7 @@ fn acpi_test(table_manager: Service<AcpiTableManager>) -> patina::test::Result {
 
     // Get the dummy FADT and verify its contents.
     let fadt = table_manager.get_acpi_table::<AcpiFadt>(table_key).expect("Should get dummy FADT");
-    assert_eq!(fadt.header.signature, signature::FADT, "Signature should match dummy FADT");
+    assert_eq!(fadt.signature(), signature::FADT, "Signature should match dummy FADT");
     assert!(fadt.x_firmware_ctrl() > 0, "Should have installed FACS");
 
     // Uninstall the dummy table.
@@ -110,7 +110,7 @@ fn acpi_protocol_test(bs: StandardBootServices) -> patina::test::Result {
     assert_eq!(get_result, efi::Status::SUCCESS, "Get table should succeed");
     // SAFETY: `table_buf` is valid and directly constructed from the dummy FADT.
     let retrieved_table = unsafe { &*table_buf };
-    assert_eq!(retrieved_table.signature, signature::FADT, "Signature should match installed FADT");
+    assert_eq!(retrieved_table.signature(), signature::FADT, "Signature should match installed FADT");
     assert_eq!(get_supported_table_versions, ACPI_VERSIONS_GTE_2, "Should support ACPI version 2.0+");
     assert_eq!(get_table_key, table_key_buf, "Table key should match installed key");
 
