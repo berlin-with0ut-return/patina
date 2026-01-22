@@ -44,6 +44,8 @@ extern crate alloc;
 
 /// Component that provides initialization of ACPI functionality in the core.
 pub mod component;
+/// Configuration HOB and component to enable ACPI component.
+pub mod config;
 /// Errors associated with operation of the ACPI protocol.
 pub mod error;
 /// Definition for ACPI HOB, which transfers existing ACPI tables from the PEI phase through the RSDP.

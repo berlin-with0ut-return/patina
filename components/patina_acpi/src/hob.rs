@@ -30,3 +30,12 @@ impl AcpiMemoryHob {
         Self { _revision: 0, _reserved: 0, _length: core::mem::size_of::<AcpiMemoryHob>() as u16, rsdp_address }
     }
 }
+
+/// A HOB that contains Patina ACPI component configuration information.
+#[derive(FromHob, zerocopy_derive::FromBytes)]
+#[hob = "920d8462-92e2-4455-805f-84c3eda283e6"]
+#[repr(C, packed)]
+pub struct AcpiConfigHob {
+    /// Indicates whether the Patina ACPI component is enabled.
+    pub(crate) enable_component: u8,
+}

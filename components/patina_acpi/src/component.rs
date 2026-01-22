@@ -78,6 +78,15 @@ impl AcpiProviderManager {
         acpi_hob: Option<Hob<AcpiMemoryHob>>,
         memory_manager: Service<dyn MemoryManager>,
     ) -> patina::error::Result<()> {
+        // Check if the ACPI component is enabled before proceeding.
+        {
+            let config = storage.get_config::<crate::config::AcpiConfig>().ok_or(EfiError::NotStarted)?;
+            if !config.enable_component {
+                log::warn!("ACPI component is disabled; skipping ACPI provider initialization.");
+                return Ok(());
+            }
+        }
+
         // Produce the EDKII ACPI protocol interfaces.
         boot_services.install_protocol_interface(None, Box::new(AcpiTableProtocol::new()))?;
         boot_services.install_protocol_interface(None, Box::new(AcpiGetProtocol::new()))?;
