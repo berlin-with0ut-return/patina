@@ -812,7 +812,7 @@ impl<P: super::PlatformInfo> super::PiDispatcher<P> {
                 Err(ImageStatus::LoadError(err)) => return err.into(),
             };
 
-        // Safety: Caller must ensure that image_handle is a valid pointer. It is null-checked above.
+        // SAFETY: Caller must ensure that image_handle is a valid pointer. It is null-checked above.
         unsafe { image_handle.write_unaligned(handle) };
         status
     }
@@ -929,7 +929,7 @@ impl<P: super::PlatformInfo> super::PiDispatcher<P> {
                 && !exit_data_size.is_null()
                 && !exit_data.is_null()
             {
-                // Safety: Caller must ensure that exit_data_size and exit_data are valid pointers if they are non-null.
+                // SAFETY: Caller must ensure that exit_data_size and exit_data are valid pointers if they are non-null.
                 unsafe {
                     exit_data_size.write_unaligned(image_exit_data.0);
                     exit_data.write_unaligned(image_exit_data.1);
@@ -963,11 +963,11 @@ impl<P: super::PlatformInfo> super::PiDispatcher<P> {
         // the unload function doesn't exist or returns an error.
         if started {
             if let Some(function) = unload_function {
-                //Safety: this is unsafe (even though rust doesn't think so) because we are calling
-                //into the "unload" function pointer that the image itself set. r_efi doesn't mark
-                //the unload function type as unsafe - so rust reports an "unused_unsafe" since it
-                //doesn't know it's unsafe. We suppress the warning and mark it unsafe anyway as a
-                //warning to the future.
+                // SAFETY: this is unsafe (even though rust doesn't think so) because we are calling
+                // into the "unload" function pointer that the image itself set. r_efi doesn't mark
+                // the unload function type as unsafe - so rust reports an "unused_unsafe" since it
+                // doesn't know it's unsafe. We suppress the warning and mark it unsafe anyway as a
+                // warning to the future.
                 #[allow(unused_unsafe)]
                 unsafe {
                     let status = (function)(image_handle);

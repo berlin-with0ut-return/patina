@@ -48,11 +48,11 @@ pub struct StandardBootServices {
     efi_boot_services: Once<&'static efi::BootServices>,
 }
 
-// Safety: efi::BootServices is not Sync/Send automatically due to the use of *mut c_void as part of function signatures
+// SAFETY: efi::BootServices is not Sync/Send automatically due to the use of *mut c_void as part of function signatures
 // within the struct. Those pointers are only used by spec-defined APIs. With respect to the efi_boot_services reference
 // itself, that is protected by the Once wrapper.
 unsafe impl Sync for StandardBootServices {}
-// Safety: See Sync impl above.
+// SAFETY: See Sync impl above.
 unsafe impl Send for StandardBootServices {}
 
 impl StandardBootServices {
@@ -997,7 +997,7 @@ impl BootServices for StandardBootServices {
         let status = efi_boot_services_fn!(self.efi_boot_services(), create_event)(
             event_type.into(),
             notify_tpl.into(),
-            // Safety: Transmuting function pointer types with matching ABIs and compatible signatures.
+            // SAFETY: Transmuting function pointer types with matching ABIs and compatible signatures.
             // Both are extern "efiapi" callbacks taking a context pointer - the generic parameter T
             // is erased to c_void for the UEFI FFI interface.
             unsafe {
@@ -1025,7 +1025,7 @@ impl BootServices for StandardBootServices {
         let status = efi_boot_services_fn!(self.efi_boot_services(), create_event_ex)(
             event_type.into(),
             notify_tpl.into(),
-            // Safety: Transmuting function pointer types with matching ABIs and compatible signatures.
+            // SAFETY: Transmuting function pointer types with matching ABIs and compatible signatures.
             // Both are extern "efiapi" callbacks - the generic parameter T is erased to c_void for FFI.
             // Wrapping in Option as the UEFI interface expects an optional callback.
             unsafe {
@@ -1666,7 +1666,7 @@ mod tests {
     #[derive(Debug)]
     struct TestProtocol(u32);
 
-    // Safety: TestProtocol provides a test protocol interface with a unique GUID for unit tests.
+    // SAFETY: TestProtocol provides a test protocol interface with a unique GUID for unit tests.
     // The GUID constant meets the requirements of the ProtocolInterface trait.
     unsafe impl ProtocolInterface for TestProtocol {
         const PROTOCOL_GUID: efi::Guid =
@@ -1676,7 +1676,7 @@ mod tests {
     #[derive(Debug)]
     struct TestProtocolEmpty;
 
-    // Safety: TestProtocolEmpty provides a test protocol interface with a unique GUID for unit tests.
+    // SAFETY: TestProtocolEmpty provides a test protocol interface with a unique GUID for unit tests.
     // The GUID constant meets the requirements of the ProtocolInterface trait. Zero-sized type is valid.
     unsafe impl ProtocolInterface for TestProtocolEmpty {
         const PROTOCOL_GUID: efi::Guid =
@@ -1690,7 +1690,7 @@ mod tests {
     ) -> efi::Status {
         // Use u64 for ptr alignment.
         let allocation = vec![0_u64; size.div_ceil(mem::size_of::<u64>())].into_boxed_slice();
-        // Safety: Test code - buffer pointer is valid for write, allocation is properly aligned.
+        // SAFETY: Test code - buffer pointer is valid for write, allocation is properly aligned.
         unsafe {
             *buffer = Box::into_raw(allocation) as *mut c_void;
         }
@@ -1702,7 +1702,7 @@ mod tests {
             return efi::Status::INVALID_PARAMETER;
         }
 
-        // Safety: Test code - buffer was allocated by efi_allocate_pool_use_box as a Box<[u64]>.
+        // SAFETY: Test code - buffer was allocated by efi_allocate_pool_use_box as a Box<[u64]>.
         unsafe {
             let _ = Box::from_raw(buffer as *mut u8);
         }
@@ -1748,7 +1748,7 @@ mod tests {
         ) -> efi::Status {
             assert_eq!(efi::EVT_RUNTIME | efi::EVT_NOTIFY_SIGNAL, event_type);
             assert_eq!(efi::TPL_APPLICATION, notify_tpl);
-            // Safety: Test code - transmute from Option<EventNotify> function pointer to raw pointer for comparison.
+            // SAFETY: Test code - transmute from Option<EventNotify> function pointer to raw pointer for comparison.
             assert_eq!(notify_callback as *const fn(), unsafe {
                 mem::transmute::<Option<extern "efiapi" fn(*mut c_void, *mut c_void)>, *const fn()>(notify_function)
             });
@@ -1823,7 +1823,7 @@ mod tests {
         ) -> efi::Status {
             assert_eq!(efi::EVT_RUNTIME | efi::EVT_NOTIFY_SIGNAL, event_type);
             assert_eq!(efi::TPL_APPLICATION, notify_tpl);
-            // Safety: Test code - transmute from Option<EventNotify> function pointer to raw pointer for comparison.
+            // SAFETY: Test code - transmute from Option<EventNotify> function pointer to raw pointer for comparison.
             assert_eq!(notify_callback as *const fn(), unsafe {
                 mem::transmute::<Option<extern "efiapi" fn(*mut c_void, *mut c_void)>, *const fn()>(notify_function)
             });
@@ -1943,7 +1943,7 @@ mod tests {
             assert_eq!(2, number_of_event);
             assert_ne!(ptr::null_mut(), events);
 
-            // Safety: Test code - index is valid for write.
+            // SAFETY: Test code - index is valid for write.
             unsafe { ptr::write(index, 1) }
             efi::Status::SUCCESS
         }
@@ -2081,9 +2081,9 @@ mod tests {
             assert_eq!(expected_mem_type, mem_type);
             assert_eq!(4, nb_pages);
             assert_ne!(ptr::null_mut(), memory);
-            // Safety: Test code - memory is valid for read.
+            // SAFETY: Test code - memory is valid for read.
             assert_eq!(0, unsafe { *memory });
-            // Safety: Test code - memory is valid for write.
+            // SAFETY: Test code - memory is valid for write.
             unsafe { ptr::write(memory, 17) }
             efi::Status::SUCCESS
         }
@@ -2109,7 +2109,7 @@ mod tests {
             assert_eq!(expected_mem_type, mem_type);
             assert_eq!(4, nb_pages);
             assert_ne!(ptr::null_mut(), memory);
-            // Safety: Test code - memory is valid for read.
+            // SAFETY: Test code - memory is valid for read.
             assert_eq!(17, unsafe { *memory });
             efi::Status::SUCCESS
         }

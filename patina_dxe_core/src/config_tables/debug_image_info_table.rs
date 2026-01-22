@@ -97,10 +97,10 @@ struct DebugImageInfoTableMetadata<'a> {
     table: &'a mut DebugImageInfoTableHeader,
     slice: Box<[EfiDebugImageInfo]>,
 }
-// Safety: This structure is only accessed under a lock and the data it points to is only modified
+// SAFETY: This structure is only accessed under a lock and the data it points to is only modified
 // under that same lock, so it is safe to send and share between threads.
 unsafe impl Sync for DebugImageInfoTableMetadata<'_> {}
-// Safety: See Sync impl above.
+// SAFETY: See Sync impl above.
 unsafe impl Send for DebugImageInfoTableMetadata<'_> {}
 
 static METADATA_TABLE: RwLock<Option<DebugImageInfoTableMetadata>> = RwLock::new(None);
