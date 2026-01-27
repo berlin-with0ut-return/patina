@@ -182,7 +182,7 @@ impl AcpiProviderManager {
         let acpi_provider = storage.get_service::<dyn AcpiProvider>().ok_or(EfiError::NotStarted)?;
         // Register the ACPI table manager service.
         // Consumers of ACPI table management should use this service rather than the provider directly.
-        storage.add_service(acpi_service);
+        // storage.add_service(acpi_service);
 
         log::trace!("ACPI Provider initialized.");
 

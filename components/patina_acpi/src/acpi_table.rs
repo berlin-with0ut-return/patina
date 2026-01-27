@@ -419,7 +419,7 @@ impl AcpiTable {
     ///
     /// - Caller must ensure the provided table, `T`, has a C compatible layout (typically using `#[repr(C)]`).
     /// - Caller must ensure that the table's first field is [AcpiTableHeader].
-    pub unsafe fn new<T: 'static>(table: T, mm: &Service<dyn MemoryManager>) -> Result<Self, AcpiError> {
+    pub unsafe fn new_in_memory<T: 'static>(table: T, mm: &Service<dyn MemoryManager>) -> Result<Self, AcpiError> {
         // SAFETY: If the caller preconditions are met, the signature, header, and table fields of the union are valid.
         let table = unsafe { Table::new(table) }?;
 
@@ -427,6 +427,15 @@ impl AcpiTable {
         unsafe {
             AcpiTable::new_from_ptr(table.as_ref() as *const T as *const AcpiTableHeader, Some(TypeId::of::<T>()), mm)
         }
+    }
+
+    pub(crate) unsafe fn new_heap<T: 'static>(table: T) -> Result<Self, AcpiError> {
+        let table = unsafe { Table::new(table) }?;
+        // Box table on the heap. This is not correct for ACPI but it will be reallocated.
+        let boxed = Box::new(table);
+        let ptr = Box::into_raw(boxed);
+        let nn = NonNull::new(ptr).ok_or(AcpiError::AllocationFailed)?;
+        Ok(AcpiTable { table: nn.cast::<Table>(), type_id: TypeId::of::<T>() })
     }
 
     /// Creates a new AcpiTable from a raw pointer.

@@ -9,7 +9,7 @@
 //!
 
 use crate::{
-    acpi_table::{AcpiTable, AcpiTableHeader},
+    acpi_table::{AcpiTable, AcpiTableHeader, Table},
     signature::{self, ACPI_VERSIONS_GTE_2},
 };
 
@@ -95,12 +95,12 @@ impl AcpiTableProtocol {
         }
 
         // SAFETY: `acpi_table_buffer` has been validated as non-null and of sufficient size above.
-        // let acpi_table = unsafe {
-        //     AcpiTable::new_from_ptr(acpi_table_buffer as *const AcpiTableHeader, None, &ACPI_TABLE_INFO.memory_manager)
-        // };
+        let acpi_table = unsafe {
+            AcpiTable::new_from_ptr(acpi_table_buffer as *const AcpiTableHeader, None, &ACPI_TABLE_INFO.memory_manager)
+        };
 
         if let Ok(table) = acpi_table {
-            let install_result = ACPI_TABLE_INFO.install_acpi_table_generic(Table::new(table).unwrap());
+            let install_result = ACPI_TABLE_INFO.install_acpi_table_generic(table);
 
             match install_result {
                 Ok(key) => {
