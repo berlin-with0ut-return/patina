@@ -45,7 +45,7 @@ fn acpi_test(table_manager: Service<AcpiTableManager>) -> patina::test::Result {
     assert!(unsafe { table_manager.install_acpi_table(facs) }.is_ok(), "Should install FACS table.");
 
     // Verify only the FADT is in the iterator.
-    let tables = table_manager.iter_tables();
+    let tables = table_manager.collect_tables();
     assert_eq!(tables.len(), 1);
     assert_eq!(tables[0].signature(), signature::FADT);
 

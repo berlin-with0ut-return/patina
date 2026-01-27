@@ -140,7 +140,7 @@ impl AcpiTableManager {
     /// This can be used in place of `get_acpi_table`, or in conjunction with it to retrieve a specific table reference.
     ///
     /// The RSDP and XSDT are not included in the list of iterable ACPI tables.
-    pub fn iter_tables(&self) -> Vec<AcpiTable> {
+    pub fn collect_tables(&self) -> Vec<AcpiTable> {
         self.provider_service.collect_tables()
     }
 }
