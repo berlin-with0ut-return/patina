@@ -10,7 +10,7 @@ use crate::{
     acpi_table::{AcpiTableHeader, AcpiXsdtMetadata},
     alloc::boxed::Box,
     hob::AcpiMemoryHob,
-    service::{AcpiProvider, AcpiTableManager},
+    service::AcpiProvider,
 };
 use alloc::vec::Vec;
 
@@ -83,7 +83,7 @@ impl AcpiProviderManager {
         boot_services.install_protocol_interface(None, Box::new(AcpiGetProtocol::new()))?;
 
         // Initialize the ACPI table info singleton (used for the protocol).
-        ACPI_TABLE_INFO.initialize(boot_services, memory_manager.clone()).map_err(|_e| EfiError::AlreadyStarted)?;
+        ACPI_TABLE_INFO.initialize(boot_services, &memory_manager).map_err(|_e| EfiError::AlreadyStarted)?;
 
         // Create and set the XSDT with an initial number of entries.
         let xsdt_size = ACPI_HEADER_LEN + MAX_INITIAL_ENTRIES * mem::size_of::<u64>();
@@ -91,8 +91,6 @@ impl AcpiProviderManager {
         // The XSDT is always allocated in reclaim memory.
         let allocator = ACPI_TABLE_INFO
             .memory_manager
-            .get()
-            .ok_or(EfiError::NotStarted)?
             .get_allocator(EfiMemoryType::ACPIReclaimMemory)
             .map_err(|_e| EfiError::OutOfResources)?;
 
@@ -148,8 +146,6 @@ impl AcpiProviderManager {
         let rsdp_size = mem::size_of::<AcpiRsdp>();
         let rsdp_allocation = ACPI_TABLE_INFO
             .memory_manager
-            .get()
-            .ok_or(EfiError::NotStarted)?
             .allocate_pages(
                 uefi_size_to_pages!(rsdp_size),
                 patina::component::service::memory::AllocationOptions::new()
@@ -184,7 +180,6 @@ impl AcpiProviderManager {
         // Set up the generic wrapper service for ACPI table management.
         // This allows installation of generic ACPI tables; i.e. install_acpi_table<T>.
         let acpi_provider = storage.get_service::<dyn AcpiProvider>().ok_or(EfiError::NotStarted)?;
-        let acpi_service = AcpiTableManager { provider_service: acpi_provider, memory_manager };
         // Register the ACPI table manager service.
         // Consumers of ACPI table management should use this service rather than the provider directly.
         storage.add_service(acpi_service);

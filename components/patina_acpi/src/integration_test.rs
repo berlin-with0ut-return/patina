@@ -21,7 +21,6 @@ use crate::{
     acpi::ACPI_TABLE_INFO,
     acpi_protocol::{AcpiGetProtocol, AcpiTableProtocol},
     acpi_table::{AcpiFacs, AcpiFadt, AcpiTableHeader},
-    service::AcpiTableManager,
     signature::{
         ACPI_VERSIONS_GTE_2, {self},
     },
