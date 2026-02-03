@@ -63,7 +63,11 @@ impl AcpiProviderExt for Service<dyn AcpiProvider> {
     unsafe fn install_acpi_table<T: 'static>(&self, table: T) -> Result<TableKey, AcpiError> {
         // SAFETY: If the safety contract of this function is upheld, the created AcpiTable is valid.
         let acpi_table = unsafe { AcpiTable::new_heap(table) }?;
-        self.install_acpi_table_generic(acpi_table)
+        let key = self.install_acpi_table_generic(acpi_table)?;
+        // new free fn
+        (unsafe { AcpiTable::free_heap(acpi_table.table.read()) })?;
+
+        Ok(key)
     }
 
     fn get_acpi_table<T: Clone + 'static>(&self, table_key: TableKey) -> Result<T, AcpiError> {

@@ -438,6 +438,12 @@ impl AcpiTable {
         Ok(AcpiTable { table: nn.cast::<Table>(), type_id: TypeId::of::<T>() })
     }
 
+    pub(crate) unsafe fn free_heap<T>(table: T) -> Result<(), AcpiError> {
+        // Reconstruct the boxed table to free it.
+        let _ = unsafe { Box::from_raw(&table as *const T as *mut T) };
+        Ok(())
+    }
+
     /// Creates a new AcpiTable from a raw pointer.
     /// When created this way, the type of the table is unknown.
     ///
