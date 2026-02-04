@@ -853,7 +853,7 @@ impl<P: super::PlatformInfo> super::PiDispatcher<P> {
                 // FFI, which is inherently unsafe, but it's not  "technically" unsafe
                 // from a rust standpoint since r_efi doesn't define the ImageEntryPoint
                 // pointer type as "pointer to unsafe function"
-                status = entry_point(image_handle, system_table);
+                status = unsafe { entry_point(image_handle, system_table) };
 
                 //safety note: any variables with "Drop" routines that need to run
                 //need to be explicitly dropped before calling exit(). Since exit()
@@ -1348,13 +1348,15 @@ fn get_file_buffer_from_load_protocol(
 
     //determine buffer size.
     let mut buffer_size = 0;
-    let status = (load_file.load_file)(
-        load_file,
-        remaining_file_path,
-        boot_policy.into(),
-        core::ptr::addr_of_mut!(buffer_size),
-        core::ptr::null_mut(),
-    );
+    let status = unsafe {
+        (load_file.load_file)(
+            load_file,
+            remaining_file_path,
+            boot_policy.into(),
+            core::ptr::addr_of_mut!(buffer_size),
+            core::ptr::null_mut(),
+        )
+    };
 
     match status {
         efi::Status::BUFFER_TOO_SMALL => (),                 // expected
@@ -1363,13 +1365,15 @@ fn get_file_buffer_from_load_protocol(
     }
 
     let mut file_buffer = vec![0u8; buffer_size];
-    let status = (load_file.load_file)(
-        load_file,
-        remaining_file_path,
-        boot_policy.into(),
-        core::ptr::addr_of_mut!(buffer_size),
-        file_buffer.as_mut_ptr() as *mut c_void,
-    );
+    let status = unsafe {
+        (load_file.load_file)(
+            load_file,
+            remaining_file_path,
+            boot_policy.into(),
+            core::ptr::addr_of_mut!(buffer_size),
+            file_buffer.as_mut_ptr() as *mut c_void,
+        )
+    };
 
     EfiError::status_to_result(status).map(|_| (file_buffer, handle))
 }

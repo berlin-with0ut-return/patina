@@ -280,7 +280,7 @@ pub extern "efiapi" fn restore_tpl(new_tpl: efi::Tpl) {
             //callbacks as "unsafe", and the r_efi definition for EventNotify would need to
             //change.
             if let Some(notify_function) = event.notify_function {
-                (notify_function)(event.event, notify_context);
+                unsafe { (notify_function)(event.event, notify_context) };
             }
         }
     }

@@ -55,11 +55,13 @@ fn get_platform_driver_override_bindings(
     let mut driver_overrides = Vec::new();
     let mut driver_image_handle: efi::Handle = core::ptr::null_mut();
     loop {
-        let status = (driver_override_protocol.get_driver)(
-            driver_override_protocol,
-            controller_handle,
-            core::ptr::addr_of_mut!(driver_image_handle),
-        );
+        let status = unsafe {
+            (driver_override_protocol.get_driver)(
+                driver_override_protocol,
+                controller_handle,
+                core::ptr::addr_of_mut!(driver_image_handle),
+            )
+        };
         if status != efi::Status::SUCCESS {
             break;
         }
@@ -87,7 +89,7 @@ fn get_family_override_bindings() -> Vec<*mut efi::protocols::driver_binding::Pr
                         .as_mut()
                         .expect("bad protocol ptr")
                 };
-                let version = (driver_override_protocol.get_version)(driver_override_protocol);
+                let version = unsafe { (driver_override_protocol.get_version)(driver_override_protocol) };
                 driver_override_map.insert(version, handle);
             }
             Err(_) => continue,
@@ -116,10 +118,12 @@ fn get_bus_specific_override_bindings(
     let mut bus_overrides = Vec::new();
     let mut driver_image_handle: efi::Handle = core::ptr::null_mut();
     loop {
-        let status = (bus_specific_override_protocol.get_driver)(
-            bus_specific_override_protocol,
-            core::ptr::addr_of_mut!(driver_image_handle),
-        );
+        let status = unsafe {
+            (bus_specific_override_protocol.get_driver)(
+                bus_specific_override_protocol,
+                core::ptr::addr_of_mut!(driver_image_handle),
+            )
+        };
         if status != efi::Status::SUCCESS {
             break;
         }
@@ -241,7 +245,7 @@ fn core_connect_single_controller(
             );
 
             //driver claims support; attempt to start it.
-            match (driver_binding.supported)(driver_binding_interface, controller_handle, device_path) {
+            match unsafe { (driver_binding.supported)(driver_binding_interface, controller_handle, device_path) } {
                 efi::Status::SUCCESS => {
                     perf_driver_binding_support_end(
                         driver_binding.driver_binding_handle,
@@ -257,7 +261,7 @@ fn core_connect_single_controller(
                         create_performance_measurement,
                     );
 
-                    if (driver_binding.start)(driver_binding_interface, controller_handle, device_path)
+                    if unsafe { (driver_binding.start)(driver_binding_interface, controller_handle, device_path) }
                         == efi::Status::SUCCESS
                     {
                         one_started = true;

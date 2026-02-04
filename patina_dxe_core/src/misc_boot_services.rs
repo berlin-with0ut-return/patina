@@ -337,11 +337,13 @@ mod tests {
             let mut data_crc: u32 = 0;
 
             // Test case 1: Valid parameters - successful CRC32 calculation
-            let status = (st.boot_services().get().calculate_crc32)(
-                BUFFER.as_ptr() as *mut c_void,
-                BUFFER.len(),
-                &mut data_crc as *mut u32,
-            );
+            let status = unsafe {
+                (st.boot_services().get().calculate_crc32)(
+                    BUFFER.as_ptr() as *mut c_void,
+                    BUFFER.len(),
+                    &mut data_crc as *mut u32,
+                )
+            };
             // Verify the function succeeded and CRC32 was calculated correctly for zero buffer
             if status == efi::Status::SUCCESS {
                 let expected_crc = crc32fast::hash(&BUFFER);
@@ -355,11 +357,9 @@ mod tests {
             }
 
             // Test case 2: Zero data size - should return INVALID_PARAMETER
-            let status = (st.boot_services().get().calculate_crc32)(
-                BUFFER.as_ptr() as *mut c_void,
-                0,
-                &mut data_crc as *mut u32,
-            );
+            let status = unsafe {
+                (st.boot_services().get().calculate_crc32)(BUFFER.as_ptr() as *mut c_void, 0, &mut data_crc as *mut u32)
+            };
             if status == efi::Status::INVALID_PARAMETER {
                 log::debug!("Zero data size correctly returned INVALID_PARAMETER");
             } else {
@@ -367,11 +367,13 @@ mod tests {
             }
 
             // Test case 3: Null data pointer - should return INVALID_PARAMETER
-            let status = (st.boot_services().get().calculate_crc32)(
-                core::ptr::null_mut(),
-                BUFFER.len(),
-                &mut data_crc as *mut u32,
-            );
+            let status = unsafe {
+                (st.boot_services().get().calculate_crc32)(
+                    core::ptr::null_mut(),
+                    BUFFER.len(),
+                    &mut data_crc as *mut u32,
+                )
+            };
             if status == efi::Status::INVALID_PARAMETER {
                 log::debug!("Null data pointer correctly returned INVALID_PARAMETER");
             } else {
@@ -379,11 +381,13 @@ mod tests {
             }
 
             // Test case 4: Null output pointer - should return INVALID_PARAMETER
-            let status = (st.boot_services().get().calculate_crc32)(
-                BUFFER.as_ptr() as *mut c_void,
-                BUFFER.len(),
-                core::ptr::null_mut(),
-            );
+            let status = unsafe {
+                (st.boot_services().get().calculate_crc32)(
+                    BUFFER.as_ptr() as *mut c_void,
+                    BUFFER.len(),
+                    core::ptr::null_mut(),
+                )
+            };
             if status == efi::Status::INVALID_PARAMETER {
                 log::debug!("Null output pointer correctly returned INVALID_PARAMETER");
             } else {
@@ -397,7 +401,7 @@ mod tests {
             init_misc_boot_services_support(st);
 
             // Test case 1: Set watchdog timer with null data - should return NOT_READY (no watchdog available in test)
-            let status = (st.boot_services().get().set_watchdog_timer)(300, 0, 0, ptr::null_mut());
+            let status = unsafe { (st.boot_services().get().set_watchdog_timer)(300, 0, 0, ptr::null_mut()) };
             if status == efi::Status::NOT_READY {
                 log::debug!("Set watchdog timer correctly returned NOT_READY (no watchdog protocol)");
             } else {
@@ -405,7 +409,7 @@ mod tests {
             }
 
             // Test case 2: Disable watchdog timer with null data - should return NOT_READY
-            let status = (st.boot_services().get().set_watchdog_timer)(0, 0, 0, ptr::null_mut());
+            let status = unsafe { (st.boot_services().get().set_watchdog_timer)(0, 0, 0, ptr::null_mut()) };
             if status == efi::Status::NOT_READY {
                 log::debug!("Disable watchdog timer correctly returned NOT_READY");
             } else {
@@ -416,7 +420,7 @@ mod tests {
             let data_ptr = data.as_ptr() as *mut efi::Char16;
 
             // Test case 3: Set the watchdog timer with non-null data - should return NOT_READY
-            let status = (st.boot_services().get().set_watchdog_timer)(300, 0, data.len(), data_ptr);
+            let status = unsafe { (st.boot_services().get().set_watchdog_timer)(300, 0, data.len(), data_ptr) };
             if status == efi::Status::NOT_READY {
                 log::debug!("Set watchdog timer with data correctly returned NOT_READY");
             } else {
@@ -424,7 +428,7 @@ mod tests {
             }
 
             // Test case 4: Disable the watchdog timer with non-null data - should return NOT_READY
-            let status = (st.boot_services().get().set_watchdog_timer)(0, 0, data.len(), data_ptr);
+            let status = unsafe { (st.boot_services().get().set_watchdog_timer)(0, 0, data.len(), data_ptr) };
             if status == efi::Status::NOT_READY {
                 log::debug!("Disable watchdog timer with data correctly returned NOT_READY");
             } else {
@@ -459,7 +463,7 @@ mod tests {
                 WATCHDOG_ARCH_PTR.init(&watchdog as *const _ as *mut c_void);
             };
             // Test case 5: Set watchdog timer with null data - should return SUCCESS (watchdog protocol available)
-            let status = (st.boot_services().get().set_watchdog_timer)(300, 0, 0, ptr::null_mut());
+            let status = unsafe { (st.boot_services().get().set_watchdog_timer)(300, 0, 0, ptr::null_mut()) };
             if status == efi::Status::SUCCESS {
                 log::debug!("Set watchdog timer correctly returned SUCCESS (watchdog protocol available)");
                 assert!(SET_PERIOD_CALLED.is_completed(), "set_timer_period was not called during set_watchdog_timer.");
@@ -474,7 +478,7 @@ mod tests {
             init_misc_boot_services_support(st);
 
             // Test case 1: Normal stall duration - should return NOT_READY (no metronome available in test)
-            let status = (st.boot_services().get().stall)(10000);
+            let status = unsafe { (st.boot_services().get().stall)(10000) };
             if status == efi::Status::NOT_READY {
                 log::debug!("Stall function correctly returned NOT_READY (no metronome protocol)");
             } else {
@@ -482,7 +486,7 @@ mod tests {
             }
 
             // Test case 2: Zero microseconds stall - should return NOT_READY
-            let status = (st.boot_services().get().stall)(0);
+            let status = unsafe { (st.boot_services().get().stall)(0) };
             if status == efi::Status::NOT_READY {
                 log::debug!("Zero stall correctly returned NOT_READY");
             } else {
@@ -490,7 +494,7 @@ mod tests {
             }
 
             // Test case 3: Maximum stall duration - should return NOT_READY
-            let status = (st.boot_services().get().stall)(usize::MAX);
+            let status = unsafe { (st.boot_services().get().stall)(usize::MAX) };
             if status == efi::Status::NOT_READY {
                 log::debug!("Maximum stall correctly returned NOT_READY");
             } else {
@@ -519,7 +523,7 @@ mod tests {
             }
 
             // Test case 4: Normal stall duration - should return SUCCESS (metronome protocol available)
-            let status = (st.boot_services().get().stall)(10000);
+            let status = unsafe { (st.boot_services().get().stall)(10000) };
             if status == efi::Status::SUCCESS {
                 log::debug!("Stall function correctly returned SUCCESS (metronome protocol available)");
                 assert!(WAIT_FOR_TICK_CALLED.is_completed(), "wait_for_tick was not called during stall.");
@@ -536,7 +540,7 @@ mod tests {
             init_misc_boot_services_support(st);
             // Call exit_boot_services with a valid map_key
             let handle: efi::Handle = 0x1000 as efi::Handle; // Example handle
-            let _status = (st.boot_services().get().exit_boot_services)(handle, valid_map_key);
+            let _status = unsafe { (st.boot_services().get().exit_boot_services)(handle, valid_map_key) };
         });
     }
 }
