@@ -1456,7 +1456,8 @@ mod tests {
             let out_slice = unsafe { core::slice::from_raw_parts(out_ptr, out_count) };
             assert_eq!(out_slice, expected.as_slice());
 
-            assert!(crate::allocator::core_free_pool(out_ptr as *mut core::ffi::c_void).is_ok());
+            // SAFETY: Test code, previously allocated as valid pointer.
+            assert!(unsafe { crate::allocator::core_free_pool(out_ptr as *mut core::ffi::c_void) }.is_ok());
         });
     }
 
@@ -1489,8 +1490,8 @@ mod tests {
             let out_slice = unsafe { core::slice::from_raw_parts(out_ptr, out_count) };
             assert_eq!(out_slice, expected.as_slice());
 
-            // cleanup
-            assert!(crate::allocator::core_free_pool(out_ptr as *mut core::ffi::c_void).is_ok());
+            // SAFETY: Test code, previously allocated as valid pointer.
+            assert!(unsafe { crate::allocator::core_free_pool(out_ptr as *mut core::ffi::c_void) }.is_ok());
         });
     }
 
@@ -1543,7 +1544,8 @@ mod tests {
             let out_slice = unsafe { core::slice::from_raw_parts(out_ptr, out_count) };
             assert_eq!(out_slice, expected.as_slice());
 
-            assert!(crate::allocator::core_free_pool(out_ptr as *mut core::ffi::c_void).is_ok());
+            // SAFETY: Test code, previously allocated as valid pointer.
+            assert!(unsafe { crate::allocator::core_free_pool(out_ptr as *mut core::ffi::c_void) }.is_ok());
         });
     }
 
@@ -1572,7 +1574,8 @@ mod tests {
             let out_slice = unsafe { core::slice::from_raw_parts(out_ptr, out_count) };
             assert_eq!(out_slice, expected.as_slice());
 
-            assert!(crate::allocator::core_free_pool(out_ptr as *mut core::ffi::c_void).is_ok());
+            // SAFETY: Test code, previously allocated as valid pointer.
+            assert!(unsafe { crate::allocator::core_free_pool(out_ptr as *mut core::ffi::c_void) }.is_ok());
         });
     }
 

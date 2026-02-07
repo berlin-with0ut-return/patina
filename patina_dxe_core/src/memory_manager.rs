@@ -76,8 +76,13 @@ impl MemoryManager for CoreMemoryManager {
         }
     }
 
+    // Frees a pool allocated with `allocate_pages`.
+    //
+    // # Safety
+    // See allocator::free_pages for safety requirements.
     unsafe fn free_pages(&self, address: usize, page_count: usize) -> Result<(), MemoryError> {
-        let result = core_free_pages(address as efi::PhysicalAddress, page_count);
+        // SAFETY: The caller must ensure the safety conditions outlined in the function's safety documentation.
+        let result = unsafe { core_free_pages(address as efi::PhysicalAddress, page_count) };
         match result {
             Ok(_) => Ok(()),
             Err(EfiError::NotFound) => Err(MemoryError::InvalidAddress),

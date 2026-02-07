@@ -617,14 +617,29 @@ pub fn core_allocate_pool(pool_type: efi::MemoryType, size: usize) -> Result<*mu
     }
 }
 
-extern "efiapi" fn free_pool(buffer: *mut c_void) -> efi::Status {
-    match core_free_pool(buffer) {
+// Frees a pool allocated with `allocate_pool`.
+//
+// # Safety
+// Freeing from a raw pointer is inherently unsafe.
+// For this function to operate safely, the caller must ensure that:
+// 1. The buffer was originally allocated by `allocate_pool` and was returned by one of the static or dynamic allocators.
+// 2. The buffer must refer to the start of the allocation, not an offset within it.
+// 3. The buffer must not have been freed previously.
+// 4. No aliased references to the buffer should exist after this call.
+unsafe extern "efiapi" fn free_pool(buffer: *mut c_void) -> efi::Status {
+    // SAFETY: If caller preconditions are met, this is a valid pointer.
+    // The `core_free_pool` function perform a basic null check.
+    match unsafe { core_free_pool(buffer) } {
         Ok(_) => efi::Status::SUCCESS,
         Err(status) => status.into(),
     }
 }
 
-pub fn core_free_pool(buffer: *mut c_void) -> Result<(), EfiError> {
+// Frees a pool allocated with `core_allocate_pool`.
+//
+// # Safety
+// For safety requirements, see allocator::free_pool().
+pub unsafe fn core_free_pool(buffer: *mut c_void) -> Result<(), EfiError> {
     if buffer.is_null() {
         return Err(EfiError::InvalidParameter);
     }
@@ -725,14 +740,30 @@ pub fn memory_type_for_handle(handle: efi::Handle) -> Option<efi::MemoryType> {
     ALLOCATORS.lock().memory_type_for_handle(handle)
 }
 
-extern "efiapi" fn free_pages(memory: efi::PhysicalAddress, pages: usize) -> efi::Status {
-    match core_free_pages(memory, pages) {
+// Frees pages allocated with `allocate_pages`.
+//
+// # Safety
+// Freeing from a raw address of unknown allocation size is inherently unsafe.
+// For this function to operate safely, the caller must ensure that:
+// 1. The buffer at `memory` was originally allocated by `core_allocate_pages`.
+// 2. The address must refer to the start of the allocation, not an offset within it.
+// 3. The allocation at `memory` must not have been freed previously.
+// 4. No aliased references to the allocation should exist after this call.
+// 5. The `pages` parameter must match the number of pages originally allocated.
+unsafe extern "efiapi" fn free_pages(memory: efi::PhysicalAddress, pages: usize) -> efi::Status {
+    // SAFETY: If caller preconditions are met, this is a valid address.
+    // The `core_free_pages` function performs basic checks on the address and page count.
+    match unsafe { core_free_pages(memory, pages) } {
         Ok(_) => efi::Status::SUCCESS,
         Err(status) => status.into(),
     }
 }
 
-pub fn core_free_pages(memory: efi::PhysicalAddress, pages: usize) -> Result<(), EfiError> {
+// Frees pages allocated with `core_allocate_pages`.
+//
+// # Safety
+// See allocator::free_pages for safety requirements.
+pub unsafe fn core_free_pages(memory: efi::PhysicalAddress, pages: usize) -> Result<(), EfiError> {
     let size = match pages.checked_mul(UEFI_PAGE_SIZE) {
         Some(size) => size,
         None => return Err(EfiError::InvalidParameter),
@@ -1720,9 +1751,11 @@ mod tests {
                 efi::Status::SUCCESS
             );
 
-            assert_eq!(free_pool(buffer_ptr), efi::Status::SUCCESS);
+            // SAFETY: `buffer_ptr` is constructed as valid by this test.
+            assert_eq!(unsafe { free_pool(buffer_ptr) }, efi::Status::SUCCESS);
 
-            assert_eq!(free_pool(core::ptr::null_mut()), efi::Status::INVALID_PARAMETER);
+            // SAFETY: this null tests intentionally passes an invalid pointer to `free_pool` to verify that it handles the error gracefully.
+            assert_eq!(unsafe { free_pool(core::ptr::null_mut()) }, efi::Status::INVALID_PARAMETER);
             //TODO: these cause non-unwinding panic which crashes the test even with "#[should_panic]".
             //assert_eq!(free_pool(buffer_ptr), efi::Status::INVALID_PARAMETER);
             //assert_eq!(free_pool(((buffer_ptr as usize) + 10) as *mut c_void), efi::Status::INVALID_PARAMETER);
@@ -1852,7 +1885,8 @@ mod tests {
                 ),
                 efi::Status::SUCCESS
             );
-            free_pages(buffer_ptr as u64, 0x10);
+            // SAFETY: `buffer_ptr` is constructed as valid by this test.
+            unsafe { free_pages(buffer_ptr as u64, 0x10) };
 
             //test successful allocate_address at the address that was just freed
             assert_eq!(
@@ -1864,7 +1898,8 @@ mod tests {
                 ),
                 efi::Status::SUCCESS
             );
-            free_pages(buffer_ptr as u64, 0x10);
+            // SAFETY: `buffer_ptr` is constructed as valid by this test.
+            unsafe { free_pages(buffer_ptr as u64, 0x10) };
 
             //test successful allocate_max where max is greater than the address that was just freed.
             buffer_ptr = buffer_ptr.wrapping_add(0x11 * 0x1000);
@@ -1877,7 +1912,8 @@ mod tests {
                 ),
                 efi::Status::SUCCESS
             );
-            free_pages(buffer_ptr as u64, 0x10);
+            // SAFETY: `buffer_ptr` is constructed as valid by this test.
+            unsafe { free_pages(buffer_ptr as u64, 0x10) };
 
             //test invalid allocation type
             assert_eq!(
@@ -1900,7 +1936,9 @@ mod tests {
                 ),
                 efi::Status::SUCCESS
             );
-            free_pages(buffer_ptr as u64, 0x10);
+
+            // SAFETY: `buffer_ptr` is constructed as valid by this test.
+            unsafe { free_pages(buffer_ptr as u64, 0x10) };
             let allocators = ALLOCATORS.lock();
             let allocator = allocators.get_allocator(0x71234567).unwrap();
             let handle = allocator.handle();
@@ -1934,10 +1972,14 @@ mod tests {
     #[test]
     fn free_pages_error_scenarios_should_be_handled_properly() {
         with_locked_state(GcdInit::WithSize(0x1000000), |_physical_hob_list| {
-            assert_eq!(free_pages(0x12345000, !0xFFF), efi::Status::INVALID_PARAMETER);
-            assert_eq!(free_pages(!0xFFF, 0x10), efi::Status::INVALID_PARAMETER);
-            assert_eq!(free_pages(0x12345678, 1), efi::Status::INVALID_PARAMETER);
-            assert_eq!(free_pages(0x12345000, 1), efi::Status::NOT_FOUND);
+            // SAFETY: This purposely tests invalid parameters.
+            assert_eq!(unsafe { free_pages(0x12345000, !0xFFF) }, efi::Status::INVALID_PARAMETER);
+            // SAFETY: This purposely tests invalid parameters.
+            assert_eq!(unsafe { free_pages(!0xFFF, 0x10) }, efi::Status::INVALID_PARAMETER);
+            // SAFETY: This purposely tests invalid parameters.
+            assert_eq!(unsafe { free_pages(0x12345678, 1) }, efi::Status::INVALID_PARAMETER);
+            // SAFETY: This purposely tests invalid parameters.
+            assert_eq!(unsafe { free_pages(0x12345000, 1) }, efi::Status::NOT_FOUND);
         });
     }
 
