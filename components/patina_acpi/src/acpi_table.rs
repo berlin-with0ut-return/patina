@@ -438,9 +438,9 @@ impl AcpiTable {
         Ok(AcpiTable { table: nn.cast::<Table>(), type_id: TypeId::of::<T>() })
     }
 
-    pub(crate) unsafe fn free_heap<T>(table: T) -> Result<(), AcpiError> {
-        // Reconstruct the boxed table to free it.
-        let _ = unsafe { Box::from_raw(&table as *const T as *mut T) };
+    pub(crate) unsafe fn free_heap<T>(ptr: NonNull<Table>) -> Result<(), AcpiError> {
+        // Reconstruct the Box<Table<T>> to free the heap allocation.
+        let _ = unsafe { Box::from_raw(ptr.cast::<Table<T>>().as_ptr()) };
         Ok(())
     }
 

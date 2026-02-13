@@ -65,8 +65,7 @@ impl AcpiProviderExt for Service<dyn AcpiProvider> {
         let acpi_table = unsafe { AcpiTable::new_heap(table) }?;
         let key = self.install_acpi_table_generic(acpi_table)?;
         // new free fn
-        (unsafe { AcpiTable::free_heap(acpi_table.table.read()) })?;
-
+        (unsafe { AcpiTable::free_heap::<T>(acpi_table.table) })?;
         Ok(key)
     }
 
