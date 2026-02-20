@@ -1,0 +1,41 @@
+examine the function pointer definitions inside of BootServices in system.rs in r_efi 6.0.0. many of them are defined as unsafe "efiapi" functions. for each function that is defined as a unsafe "efiapi" function, check where they are assigned inside patina_dxe_core. for example, the eventing boot services functions are defined in events.rs and are assigned as such:
+    let mut bs = st.boot_services().get();
+    bs.create_event = create_event;
+    bs.create_event_ex = create_event_ex;
+    bs.close_event = close_event;
+    bs.signal_event = signal_event;
+    bs.wait_for_event = wait_for_event;
+    bs.check_event = check_event;
+    bs.set_timer = set_timer;
+    bs.raise_tpl = raise_tpl;
+    bs.restore_tpl = restore_tpl;
+for each of these assignments, find the "efiapi" function defined within patina_dxe_core that corresponds to an unsafe "efiapi" boot services definition. for example, create_event_ex is defined starting line 70 in events.rs
+extern "efiapi" fn create_event_ex(
+    event_type: u32,
+    notify_tpl: efi::Tpl,
+    notify_function: Option<efi::EventNotify>,
+    notify_context: *const c_void,
+    event_group: *const efi::Guid,
+    event: *mut efi::Event,
+) -> efi::Status {
+for each of these BootServices definitions, if r-efi marks the function type as unsafe, change the patina_dxe_core definition to also be unsafe. then, add the safety documentation at the top of the function along with a one-sentence description of what the function does. the safety documentation should list any requirements necessary to avoid undefined behavior in the function. undefined behavior includes all behavior defined as UB in Rust, as well as undefined/unsafe behavior that can occur during UEFI boot and DXE due to unsafe parameters being passed in by a caller or unsafe usage of the function or its outputs. be succinct and do not list any unnecessary requirements, but also be comprehensive in proactively considering failure scenarios. list the safety requirements as a numbered list with the #Safety tag. an example format is provided below for create_event:
+// Creates a new event with the specified parameters and stores the handle in the provided event pointer.
+//
+// # Safety
+// 1. `event`(if non-null) must be a valid, writable pointer large enough to hold an `efi::Event`.
+// 2. `event` and `notify_context` (if non-null) must not alias immutable memory or violate Rust's aliasing rules.
+// 3. `notify_context` must remain valid for the lifetime of the event, as it may be accessed by UEFI callbacks at any time until the event is closed.
+// 4. `notify_tpl` must comply with UEFI spec callback TPl expectations.
+For the safety requirements, only include safety requirements that are not handled gracefully by existing code. example, create_event checks if event.is_null() at the beginning, so this is not undefined behavior. 
+after converting these "efiapi" functions to unsafe, calls to these functions may need to be defined as unsafe as well. for each of these unsafe calls, provide justification as to why the behavior/call is safe with a safety comment. within no more than 3 sentences, explain why the call meets the safety requirements that you have defined for the unsafe "efiapi" function. An example of format is provided below:
+                    // Free the old MAT table if one exists.
+                    // SAFETY: `current_ptr` is a valid, previously installed configuration table.
+                    // Since it has been replaced, it is no longer referenced after this point.
+                    if let Err(err) = unsafe { core_free_pool(current_ptr.as_ptr()) } {
+                        log::error!("Error freeing previous MAT pointer: {err:#X?}");
+                    }
+every new unsafe {} call must have a corresponding SAFETY comment, even test code. SAFETY comments should clearly document how an unsafe function call meets the unsafe function's # Safety requirements in a non-tautological manner. if safety relies on the safety contract of an outer unsafe function, specify which safety requirements make the call safe; otherwise, explain how the existing code and checks insure safe input to the unsafe function. you are not allowed to simply restate the safety requirements -- an clear explanation must be provided for each safety requirement.
+
+do this for each function in BootServices one by one, stopping between each function to allow me to review your changes. do not continue onto the next function until i review and approve your changes to the current function. for example, you should start by applying the above instructions to BootRaiseTpl, stop and let me review your changes, and continue onto BootRestoreTpl once I approve those changes. 
+
+if there are places where safety cannot be justified, note them as TODO_UNSAFE. do not hallucinate or make up safety justifications if the code and # Safety requirements do not guarantee safety. these include cases where a function assumes a safety contract without being marked unsafe and explicitly stating the contract, or unsufficient checks to guarantee safe input. 
