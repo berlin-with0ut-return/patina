@@ -71,11 +71,16 @@ impl<T: ?Sized> TplMutex<T> {
     /// Attempting to acquire the lock while running at a TPL level higher than the lock's TPL level will panic due to
     /// TPL inversion.
     pub fn try_lock(&self) -> Option<TplGuard<'_, T>> {
-        let release_tpl = raise_tpl(self.tpl_lock_level);
+        // SAFETY: `release_tpl` is stored in the returned `TplGuard` and unconditionally passed to
+        // `restore_tpl` in `TplGuard::drop`, ensuring the TPL is always restored when the guard is
+        // released.
+        let release_tpl = unsafe { raise_tpl(self.tpl_lock_level) };
         if self.lock.compare_exchange(false, true, Ordering::Acquire, Ordering::Relaxed).is_ok() {
             Some(TplGuard { release_tpl, mutex: self })
         } else {
-            restore_tpl(release_tpl);
+            // SAFETY: `release_tpl` is the value returned by `raise_tpl(self.tpl_lock_level)` a
+            // few lines above in this function.
+            unsafe { restore_tpl(release_tpl) };
             None
         }
     }
@@ -128,7 +133,9 @@ impl<'a, T: ?Sized> DerefMut for TplGuard<'a, T> {
 impl<T: ?Sized> Drop for TplGuard<'_, T> {
     fn drop(&mut self) {
         self.mutex.lock.store(false, Ordering::Release);
-        restore_tpl(self.release_tpl);
+        // SAFETY: `self.release_tpl` was stored at guard construction time from the value returned
+        // by `raise_tpl(self.mutex.tpl_lock_level)` in `try_lock`.
+        unsafe { restore_tpl(self.release_tpl) };
     }
 }
 
@@ -147,12 +154,22 @@ mod tests {
     fn with_reset_state<F: Fn() + std::panic::RefUnwindSafe>(f: F) {
         let result = crate::test_support::with_global_lock(|| {
             test_support::init_test_logger();
-            raise_tpl(efi::TPL_HIGH_LEVEL);
-            restore_tpl(efi::TPL_APPLICATION);
+            // SAFETY: `restore_tpl(efi::TPL_APPLICATION)` is called on the very next line.
+            unsafe { raise_tpl(efi::TPL_HIGH_LEVEL) };
+            // SAFETY: `raise_tpl(TPL_HIGH_LEVEL)` immediately above ensures `CURRENT_TPL` is
+            // exactly `TPL_HIGH_LEVEL` regardless of prior state; the global test lock ensures
+            // no concurrent code is affected by dispatching pending notifications during the
+            // reset.
+            unsafe { restore_tpl(efi::TPL_APPLICATION) };
 
             let _guard = test_support::StateGuard::new(|| {
-                raise_tpl(efi::TPL_HIGH_LEVEL);
-                restore_tpl(efi::TPL_APPLICATION);
+                // SAFETY: `restore_tpl(efi::TPL_APPLICATION)` is called on the very next line,
+                unsafe { raise_tpl(efi::TPL_HIGH_LEVEL) };
+                // SAFETY: `raise_tpl(TPL_HIGH_LEVEL)` immediately above ensures `CURRENT_TPL` is
+                // exactly `TPL_HIGH_LEVEL` regardless of prior state; the global test lock ensures
+                // no concurrent code is affected by dispatching pending notifications during the
+                // reset
+                unsafe { restore_tpl(efi::TPL_APPLICATION) };
             });
 
             f();

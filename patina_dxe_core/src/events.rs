@@ -180,8 +180,10 @@ pub extern "efiapi" fn check_event(event: efi::Event) -> efi::Status {
     }
 
     // raise/restore TPL to allow notifies to occur at the appropriate level.
-    let old_tpl = raise_tpl(efi::TPL_HIGH_LEVEL);
-    restore_tpl(old_tpl);
+    // SAFETY: `restore_tpl(old_tpl)` is called on the very next line unconditionally.
+    let old_tpl = unsafe { raise_tpl(efi::TPL_HIGH_LEVEL) };
+    // SAFETY: `old_tpl` is the value returned by `raise_tpl(TPL_HIGH_LEVEL)` on the preceding line.
+    unsafe { restore_tpl(old_tpl) };
 
     match EVENT_DB.read_and_clear_signaled(event) {
         Ok(signaled) => {
@@ -213,7 +215,13 @@ pub extern "efiapi" fn set_timer(event: efi::Event, timer_type: efi::TimerDelay,
     }
 }
 
-pub extern "efiapi" fn raise_tpl(new_tpl: efi::Tpl) -> efi::Tpl {
+// Raises the current TPL to `new_tpl` and returns the previous TPL.
+//
+// # Safety
+// 1. The caller must ensure `restore_tpl` is called with the returned value before the
+//    execution context exits; leaving TPL elevated at `TPL_HIGH_LEVEL` permanently disables
+//    interrupts and deadlocks the system.
+pub unsafe extern "efiapi" fn raise_tpl(new_tpl: efi::Tpl) -> efi::Tpl {
     assert!(new_tpl <= efi::TPL_HIGH_LEVEL, "Invalid attempt to raise TPL above TPL_HIGH_LEVEL");
 
     let prev_tpl = CURRENT_TPL.fetch_max(new_tpl, Ordering::SeqCst);
@@ -229,7 +237,13 @@ pub extern "efiapi" fn raise_tpl(new_tpl: efi::Tpl) -> efi::Tpl {
     prev_tpl
 }
 
-pub extern "efiapi" fn restore_tpl(new_tpl: efi::Tpl) {
+// Lowers the current TPL to `new_tpl`, dispatching any pending event notifications queued above that level.
+//
+// # Safety
+// 1. `new_tpl` must be the value previously returned by the corresponding `raise_tpl` call for
+//    the current execution context; passing a mismatched value may dispatch event notifications
+//    unexpectedly or re-enable interrupts at an unintended time.
+pub unsafe extern "efiapi" fn restore_tpl(new_tpl: efi::Tpl) {
     let prev_tpl = CURRENT_TPL.fetch_min(new_tpl, Ordering::SeqCst);
 
     assert!(
@@ -293,11 +307,13 @@ pub extern "efiapi" fn restore_tpl(new_tpl: efi::Tpl) {
 }
 
 extern "efiapi" fn timer_tick(time: u64) {
-    let old_tpl = raise_tpl(efi::TPL_HIGH_LEVEL);
+    // SAFETY: `restore_tpl(old_tpl)` is called unconditionally at the end of this function.
+    let old_tpl = unsafe { raise_tpl(efi::TPL_HIGH_LEVEL) };
     SYSTEM_TIME.fetch_add(time, Ordering::SeqCst);
     let current_time = SYSTEM_TIME.load(Ordering::SeqCst);
     EVENT_DB.timer_tick(current_time);
-    restore_tpl(old_tpl); //implicitly dispatches timer notifies if any.
+    // SAFETY: `old_tpl` is the value returned by `raise_tpl(TPL_HIGH_LEVEL)` at the start of this function.
+    unsafe { restore_tpl(old_tpl) }; //implicitly dispatches timer notifies if any.
 }
 
 extern "efiapi" fn timer_available_callback(event: efi::Event, _context: *mut c_void) {
@@ -743,11 +759,20 @@ mod tests {
 
             // special callback that does TPL manipulation.
             extern "efiapi" fn test_tpl_switching_notify(_event: efi::Event, _context: *mut c_void) {
-                let old_tpl = raise_tpl(efi::TPL_HIGH_LEVEL);
-                restore_tpl(efi::TPL_APPLICATION);
+                // SAFETY: `restore_tpl(efi::TPL_APPLICATION)` is called on the very next line.
+                let old_tpl = unsafe { raise_tpl(efi::TPL_HIGH_LEVEL) };
+                // TODO_UNSAFE: `efi::TPL_APPLICATION` was not returned by the corresponding
+                // `raise_tpl` call above; the callback intentionally lowers the TPL below the
+                // pre-raise level to dispatch lower-priority events, relying on the dispatch loop's
+                // cleanup, which is not covered by requirement 1.
+                unsafe { restore_tpl(efi::TPL_APPLICATION) };
 
                 if old_tpl > efi::TPL_APPLICATION {
-                    raise_tpl(old_tpl);
+                    // TODO_UNSAFE: `restore_tpl` is not called for this raise; the event dispatch
+                    // loop restores TPL via a direct `CURRENT_TPL.store` after the callback returns,
+                    // but this relies on an implicit contract with the dispatch loop that is not
+                    // covered by the safety requirements for `raise_tpl`.
+                    unsafe { raise_tpl(old_tpl) };
                 }
             }
 
@@ -773,7 +798,8 @@ mod tests {
             assert_eq!(result, efi::Status::SUCCESS);
 
             //raise TPL to callback than event
-            let old_tpl = raise_tpl(efi::TPL_CALLBACK);
+            // SAFETY: `restore_tpl(old_tpl)` is called at the end of this test block.
+            let old_tpl = unsafe { raise_tpl(efi::TPL_CALLBACK) };
 
             // Signal the event
             let result = signal_event(event);
@@ -795,7 +821,8 @@ mod tests {
             // Clean up
             let _ = close_event(event);
             let _ = close_event(event2);
-            restore_tpl(old_tpl);
+            // SAFETY: `old_tpl` is the value returned by `raise_tpl(TPL_CALLBACK)` earlier in this test block.
+            unsafe { restore_tpl(old_tpl) };
         });
     }
 
@@ -896,17 +923,23 @@ mod tests {
             CURRENT_TPL.store(efi::TPL_APPLICATION, Ordering::SeqCst);
 
             // Test raising from APPLICATION to CALLBACK
-            let prev_tpl = raise_tpl(efi::TPL_CALLBACK);
+            // SAFETY: `TPL_CALLBACK` < `TPL_HIGH_LEVEL` so no interrupt state is modified, and
+            // `CURRENT_TPL` is directly restored before the test exits.
+            let prev_tpl = unsafe { raise_tpl(efi::TPL_CALLBACK) };
             assert_eq!(prev_tpl, efi::TPL_APPLICATION);
             assert_eq!(CURRENT_TPL.load(Ordering::SeqCst), efi::TPL_CALLBACK);
 
             // Test raising from CALLBACK to NOTIFY
-            let prev_tpl = raise_tpl(efi::TPL_NOTIFY);
+            // SAFETY: `TPL_NOTIFY` < `TPL_HIGH_LEVEL` so no interrupt state is modified, and
+            // `CURRENT_TPL` is directly restored before the test exits.
+            let prev_tpl = unsafe { raise_tpl(efi::TPL_NOTIFY) };
             assert_eq!(prev_tpl, efi::TPL_CALLBACK);
             assert_eq!(CURRENT_TPL.load(Ordering::SeqCst), efi::TPL_NOTIFY);
 
             // Test raising to HIGH_LEVEL (should disable interrupts)
-            let prev_tpl = raise_tpl(efi::TPL_HIGH_LEVEL);
+            // SAFETY: `interrupts::enable_interrupts()` is explicitly called below and `CURRENT_TPL`
+            // is directly restored before the test exits.
+            let prev_tpl = unsafe { raise_tpl(efi::TPL_HIGH_LEVEL) };
             assert_eq!(prev_tpl, efi::TPL_NOTIFY);
             assert_eq!(CURRENT_TPL.load(Ordering::SeqCst), efi::TPL_HIGH_LEVEL);
 
@@ -935,7 +968,10 @@ mod tests {
             CURRENT_TPL.store(efi::TPL_APPLICATION, Ordering::SeqCst);
 
             // Test with valid value - should not panic
-            let prev_tpl = raise_tpl(efi::TPL_HIGH_LEVEL);
+            // SAFETY: In the test execution environment `disable_interrupts()` is a stub no-op so
+            // no actual interrupt state is modified. `CURRENT_TPL` is restored on the very next
+            // line before the test exits.
+            let prev_tpl = unsafe { raise_tpl(efi::TPL_HIGH_LEVEL) };
             assert_eq!(prev_tpl, efi::TPL_APPLICATION);
             assert_eq!(CURRENT_TPL.load(Ordering::SeqCst), efi::TPL_HIGH_LEVEL);
 
@@ -966,11 +1002,16 @@ mod tests {
             assert!(would_panic, "Attempting to raise TPL to a lower value should cause a panic");
 
             // Test valid case - should not panic
-            let prev_tpl = raise_tpl(current_tpl); // Same level, should be fine
+            // SAFETY: `current_tpl` is `TPL_NOTIFY` < `TPL_HIGH_LEVEL` so no interrupt state is
+            // modified, and `CURRENT_TPL` is directly restored before the test exits.
+            let prev_tpl = unsafe { raise_tpl(current_tpl) }; // Same level, should be fine
             assert_eq!(prev_tpl, current_tpl);
 
             let higher_tpl = efi::TPL_HIGH_LEVEL; // Higher than NOTIFY
-            let prev_tpl = raise_tpl(higher_tpl);
+            // SAFETY: In the test execution environment `disable_interrupts()` is a stub no-op so
+            // no actual interrupt state is modified. `CURRENT_TPL` is directly restored before the
+            // test exits.
+            let prev_tpl = unsafe { raise_tpl(higher_tpl) };
             assert_eq!(prev_tpl, current_tpl);
             assert_eq!(CURRENT_TPL.load(Ordering::SeqCst), higher_tpl);
 
@@ -990,15 +1031,25 @@ mod tests {
             interrupts::disable_interrupts();
 
             // Test restoring from HIGH_LEVEL to NOTIFY
-            restore_tpl(efi::TPL_NOTIFY);
+            // SAFETY: `CURRENT_TPL` was explicitly set to `TPL_HIGH_LEVEL` and interrupts were
+            // manually disabled above, replicating the exact state produced by
+            // `raise_tpl(TPL_HIGH_LEVEL)`; `TPL_NOTIFY` is therefore a valid prior-TPL value for
+            // this established state.
+            unsafe { restore_tpl(efi::TPL_NOTIFY) };
             assert_eq!(CURRENT_TPL.load(Ordering::SeqCst), efi::TPL_NOTIFY);
 
             // Test restoring from NOTIFY to CALLBACK
-            restore_tpl(efi::TPL_CALLBACK);
+            // SAFETY: the preceding `restore_tpl(TPL_NOTIFY)` set `CURRENT_TPL` to `TPL_NOTIFY`,
+            // establishing an equivalent post-raise state; `TPL_CALLBACK` is a valid prior-TPL
+            // for that state.
+            unsafe { restore_tpl(efi::TPL_CALLBACK) };
             assert_eq!(CURRENT_TPL.load(Ordering::SeqCst), efi::TPL_CALLBACK);
 
             // Test restoring from CALLBACK to APPLICATION
-            restore_tpl(efi::TPL_APPLICATION);
+            // SAFETY: the preceding `restore_tpl(TPL_CALLBACK)` set `CURRENT_TPL` to
+            // `TPL_CALLBACK`, establishing an equivalent post-raise state; `TPL_APPLICATION` is a
+            // valid prior-TPL for that state.
+            unsafe { restore_tpl(efi::TPL_APPLICATION) };
             assert_eq!(CURRENT_TPL.load(Ordering::SeqCst), efi::TPL_APPLICATION);
 
             // Restore original TPL
@@ -1027,11 +1078,17 @@ mod tests {
             assert!(would_panic, "Attempting to restore TPL to a higher value should cause a panic");
 
             // Test valid case - should not panic
-            restore_tpl(current_tpl); // Same level, should be fine
+            // SAFETY: `CURRENT_TPL` was set to `current_tpl` directly above; calling with the
+            // same value is a no-op (new_tpl == prev_tpl), so no notifications are dispatched and
+            // no interrupt state changes occur.
+            unsafe { restore_tpl(current_tpl) }; // Same level, should be fine
             assert_eq!(CURRENT_TPL.load(Ordering::SeqCst), current_tpl);
 
             let lower_tpl = efi::TPL_CALLBACK; // Lower than NOTIFY
-            restore_tpl(lower_tpl);
+            // SAFETY: `CURRENT_TPL` was set to `current_tpl` (TPL_NOTIFY < TPL_HIGH_LEVEL) so no
+            // interrupts were disabled; restoring to `lower_tpl` from this manually-established
+            // state is equivalent to restoring from a prior raise.
+            unsafe { restore_tpl(lower_tpl) };
             assert_eq!(CURRENT_TPL.load(Ordering::SeqCst), lower_tpl);
 
             // Restore original TPL
