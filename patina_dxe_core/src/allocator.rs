@@ -585,7 +585,16 @@ fn alloc_error_handler(layout: alloc::alloc::Layout) -> ! {
     panic!("allocation error: {:?}", layout)
 }
 
-extern "efiapi" fn allocate_pool(pool_type: efi::MemoryType, size: usize, buffer: *mut *mut c_void) -> efi::Status {
+// Allocates a pool of the given type and size and stores the pointer in `buffer`.
+//
+// # Safety
+// 1. `buffer` must be a valid, writable, non-null pointer to a `*mut c_void`; it receives
+//    the base address of the allocation on success.
+unsafe extern "efiapi" fn allocate_pool(
+    pool_type: efi::MemoryType,
+    size: usize,
+    buffer: *mut *mut c_void,
+) -> efi::Status {
     if buffer.is_null() {
         return efi::Status::INVALID_PARAMETER;
     }
@@ -657,7 +666,15 @@ pub unsafe fn core_free_pool(buffer: *mut c_void) -> Result<(), EfiError> {
     }
 }
 
-extern "efiapi" fn allocate_pages(
+// Allocates the requested number of pages of the specified memory type and stores the base address in `memory`.
+//
+// # Safety
+// 1. `memory` must be a valid, writable pointer to a `efi::PhysicalAddress`; it is used both as
+//    an input (for `ALLOCATE_ADDRESS` / `ALLOCATE_MAX_ADDRESS`) and as an output to receive the
+//    allocated base address.
+// 2. For `ALLOCATE_ADDRESS` and `ALLOCATE_MAX_ADDRESS`, the value read from `memory` must be a
+//    valid physical address; passing a garbage value may corrupt allocator state.
+unsafe extern "efiapi" fn allocate_pages(
     allocation_type: efi::AllocateType,
     memory_type: efi::MemoryType,
     pages: usize,
@@ -815,20 +832,41 @@ pub unsafe fn core_free_pages(memory: efi::PhysicalAddress, pages: usize) -> Res
     res
 }
 
-extern "efiapi" fn copy_mem(destination: *mut c_void, source: *mut c_void, length: usize) {
-    // SAFETY: caller must ensure that the source and destination are valid for length bytes.
+// Copies `length` bytes from `source` to `destination`. The buffers may overlap.
+//
+// # Safety
+// 1. `destination` must be valid for writes of `length` bytes.
+// 2. `source` must be valid for reads of `length` bytes.
+// 3. Neither `source + length` nor `destination + length` may overflow the processor's address space
+//    (per UEFI spec §7.5, the result is unpredictable if either buffer crosses the top of the address space).
+unsafe extern "efiapi" fn copy_mem(destination: *mut c_void, source: *mut c_void, length: usize) {
+    // SAFETY: Caller ensures `source` and `destination` are valid for `length` bytes per requirements #1 and #2.
     unsafe { core::ptr::copy(source as *mut u8, destination as *mut u8, length) }
 }
 
-extern "efiapi" fn set_mem(buffer: *mut c_void, size: usize, value: u8) {
-    // SAFETY: caller must ensure that the buffer is valid for size bytes.
+// Fills `size` bytes at `buffer` with `value`.
+//
+// # Safety
+// 1. `buffer` must be valid for writes of `size` bytes.
+// 2. `buffer + size` must not overflow the processor's address space
+//    (per UEFI spec §7.5, the result is unpredictable if the buffer crosses the top of the address space).
+unsafe extern "efiapi" fn set_mem(buffer: *mut c_void, size: usize, value: u8) {
+    // SAFETY: Caller ensures `buffer` is valid for `size` bytes per requirement #1.
     unsafe {
         let dst_buffer = from_raw_parts_mut(buffer as *mut u8, size);
         dst_buffer.fill(value);
     }
 }
 
-extern "efiapi" fn get_memory_map(
+// Returns the current memory map.
+//
+// # Safety
+// 1. `memory_map_size` must be a valid, writable, non-null pointer to a `usize`.
+// 2. `memory_map`, if non-null, must be valid for writes of at least
+//    `*memory_map_size / size_of::<MemoryDescriptor>()` descriptors.
+// 3. `map_key`, `descriptor_size`, and `descriptor_version`, if non-null, must each be
+//    valid, writable pointers.
+unsafe extern "efiapi" fn get_memory_map(
     memory_map_size: *mut usize,
     memory_map: *mut efi::MemoryDescriptor,
     map_key: *mut usize,
@@ -1710,33 +1748,43 @@ mod tests {
             let mut buffer_ptr = core::ptr::null_mut();
 
             // test that disallowed types cannot be allocated
+            // SAFETY: `addr_of_mut!(buffer_ptr)` is a valid, writable pointer to a local variable,
+            //         satisfying requirement 1.
             assert_eq!(
-                allocate_pool(efi::CONVENTIONAL_MEMORY, 0x1000, core::ptr::addr_of_mut!(buffer_ptr)),
+                unsafe { allocate_pool(efi::CONVENTIONAL_MEMORY, 0x1000, core::ptr::addr_of_mut!(buffer_ptr)) },
+                efi::Status::INVALID_PARAMETER
+            );
+
+            // SAFETY: `addr_of_mut!(buffer_ptr)` is a valid, writable pointer to a local variable,
+            //         satisfying requirement 1.
+            assert_eq!(
+                unsafe { allocate_pool(efi::PERSISTENT_MEMORY, 0x1000, core::ptr::addr_of_mut!(buffer_ptr)) },
                 efi::Status::INVALID_PARAMETER
             );
 
             assert_eq!(
-                allocate_pool(efi::PERSISTENT_MEMORY, 0x1000, core::ptr::addr_of_mut!(buffer_ptr)),
-                efi::Status::INVALID_PARAMETER
-            );
-
-            assert_eq!(
-                allocate_pool(efi::UNUSABLE_MEMORY, 0x1000, core::ptr::addr_of_mut!(buffer_ptr)),
+                unsafe { allocate_pool(efi::UNUSABLE_MEMORY, 0x1000, core::ptr::addr_of_mut!(buffer_ptr)) },
                 efi::Status::SUCCESS
             );
 
+            // SAFETY: `addr_of_mut!(buffer_ptr)` is a valid, writable pointer to a local variable,
+            //         satisfying requirement 1.
             assert_eq!(
-                allocate_pool(efi::UNACCEPTED_MEMORY_TYPE, 0x1000, core::ptr::addr_of_mut!(buffer_ptr)),
+                unsafe { allocate_pool(efi::UNACCEPTED_MEMORY_TYPE, 0x1000, core::ptr::addr_of_mut!(buffer_ptr)) },
                 efi::Status::INVALID_PARAMETER
             );
 
+            // SAFETY: `addr_of_mut!(buffer_ptr)` is a valid, writable pointer to a local variable,
+            //         satisfying requirement 1.
             assert_eq!(
-                allocate_pool(efi::BOOT_SERVICES_DATA, 0x1000, core::ptr::addr_of_mut!(buffer_ptr)),
+                unsafe { allocate_pool(efi::BOOT_SERVICES_DATA, 0x1000, core::ptr::addr_of_mut!(buffer_ptr)) },
                 efi::Status::SUCCESS
             );
 
+            // SAFETY: `buffer` is null to test the invalid-parameter path; `allocate_pool` null-checks
+            //         it and returns `INVALID_PARAMETER` before any dereference, so no UB occurs.
             assert_eq!(
-                allocate_pool(efi::BOOT_SERVICES_DATA, 0x2000000, core::ptr::null_mut()),
+                unsafe { allocate_pool(efi::BOOT_SERVICES_DATA, 0x2000000, core::ptr::null_mut()) },
                 efi::Status::INVALID_PARAMETER
             );
         });
@@ -1746,8 +1794,10 @@ mod tests {
     fn free_pool_should_free_pool() {
         with_locked_state(GcdInit::WithSize(0x1000000), |_physical_hob_list| {
             let mut buffer_ptr = core::ptr::null_mut();
+            // SAFETY: `addr_of_mut!(buffer_ptr)` is a valid, writable pointer to a local variable,
+            //         satisfying requirement 1.
             assert_eq!(
-                allocate_pool(efi::BOOT_SERVICES_DATA, 0x1000, core::ptr::addr_of_mut!(buffer_ptr)),
+                unsafe { allocate_pool(efi::BOOT_SERVICES_DATA, 0x1000, core::ptr::addr_of_mut!(buffer_ptr)) },
                 efi::Status::SUCCESS
             );
 
@@ -1823,79 +1873,109 @@ mod tests {
     fn allocate_pages_should_allocate_pages() {
         with_locked_state(GcdInit::WithSize(0x1000000), |_physical_hob_list| {
             //test test null memory pointer fails with invalid param.
+            // SAFETY: `memory` is null; `allocate_pages` null-checks it and returns `INVALID_PARAMETER`
+            //         before any dereference, so no UB occurs.
             assert_eq!(
-                allocate_pages(
-                    efi::ALLOCATE_ANY_PAGES,
-                    efi::BOOT_SERVICES_DATA,
-                    0x4,
-                    core::ptr::null_mut() as *mut efi::PhysicalAddress
-                ),
+                unsafe {
+                    allocate_pages(
+                        efi::ALLOCATE_ANY_PAGES,
+                        efi::BOOT_SERVICES_DATA,
+                        0x4,
+                        core::ptr::null_mut() as *mut efi::PhysicalAddress,
+                    )
+                },
                 efi::Status::INVALID_PARAMETER
             );
 
             //test can't allocate un-allocatable types
+            // SAFETY: `memory` is null; `allocate_pages` rejects the disallowed memory type before
+            //         accessing `memory` — no dereference occurs.
             assert_eq!(
-                allocate_pages(
-                    efi::ALLOCATE_ANY_PAGES,
-                    efi::CONVENTIONAL_MEMORY,
-                    0x4,
-                    core::ptr::null_mut() as *mut efi::PhysicalAddress
-                ),
+                unsafe {
+                    allocate_pages(
+                        efi::ALLOCATE_ANY_PAGES,
+                        efi::CONVENTIONAL_MEMORY,
+                        0x4,
+                        core::ptr::null_mut() as *mut efi::PhysicalAddress,
+                    )
+                },
                 efi::Status::INVALID_PARAMETER
             );
 
+            // SAFETY: `memory` is null; `allocate_pages` rejects the disallowed memory type before
+            //         accessing `memory` — no dereference occurs.
             assert_eq!(
-                allocate_pages(
-                    efi::ALLOCATE_ANY_PAGES,
-                    efi::PERSISTENT_MEMORY,
-                    0x4,
-                    core::ptr::null_mut() as *mut efi::PhysicalAddress
-                ),
+                unsafe {
+                    allocate_pages(
+                        efi::ALLOCATE_ANY_PAGES,
+                        efi::PERSISTENT_MEMORY,
+                        0x4,
+                        core::ptr::null_mut() as *mut efi::PhysicalAddress,
+                    )
+                },
                 efi::Status::INVALID_PARAMETER
             );
 
+            // SAFETY: `memory` is null; `allocate_pages` null-checks it and returns `INVALID_PARAMETER`
+            //         before any dereference, so no UB occurs.
             assert_eq!(
-                allocate_pages(
-                    efi::ALLOCATE_ANY_PAGES,
-                    efi::UNUSABLE_MEMORY,
-                    0x4,
-                    core::ptr::null_mut() as *mut efi::PhysicalAddress
-                ),
+                unsafe {
+                    allocate_pages(
+                        efi::ALLOCATE_ANY_PAGES,
+                        efi::UNUSABLE_MEMORY,
+                        0x4,
+                        core::ptr::null_mut() as *mut efi::PhysicalAddress,
+                    )
+                },
                 efi::Status::INVALID_PARAMETER
             );
 
+            // SAFETY: `memory` is null; `allocate_pages` rejects the disallowed memory type before
+            //         accessing `memory` — no dereference occurs.
             assert_eq!(
-                allocate_pages(
-                    efi::ALLOCATE_ANY_PAGES,
-                    efi::UNACCEPTED_MEMORY_TYPE,
-                    0x4,
-                    core::ptr::null_mut() as *mut efi::PhysicalAddress
-                ),
+                unsafe {
+                    allocate_pages(
+                        efi::ALLOCATE_ANY_PAGES,
+                        efi::UNACCEPTED_MEMORY_TYPE,
+                        0x4,
+                        core::ptr::null_mut() as *mut efi::PhysicalAddress,
+                    )
+                },
                 efi::Status::INVALID_PARAMETER
             );
 
             //test successful allocate_any
             let mut buffer_ptr: *mut u8 = core::ptr::null_mut();
+            // SAFETY: `addr_of_mut!(buffer_ptr)` is a valid, writable pointer to a local variable,
+            //         satisfying requirement 1; `ALLOCATE_ANY_PAGES` does not read `memory` as an
+            //         input, so requirement 2 does not apply.
             assert_eq!(
-                allocate_pages(
-                    efi::ALLOCATE_ANY_PAGES,
-                    efi::BOOT_SERVICES_DATA,
-                    0x10,
-                    core::ptr::addr_of_mut!(buffer_ptr) as *mut efi::PhysicalAddress
-                ),
+                unsafe {
+                    allocate_pages(
+                        efi::ALLOCATE_ANY_PAGES,
+                        efi::BOOT_SERVICES_DATA,
+                        0x10,
+                        core::ptr::addr_of_mut!(buffer_ptr) as *mut efi::PhysicalAddress,
+                    )
+                },
                 efi::Status::SUCCESS
             );
             // SAFETY: `buffer_ptr` is constructed as valid by this test.
             unsafe { free_pages(buffer_ptr as u64, 0x10) };
 
             //test successful allocate_address at the address that was just freed
+            // SAFETY: `addr_of_mut!(buffer_ptr)` is a valid, writable pointer satisfying requirement 1;
+            //         `buffer_ptr` holds an address returned by a prior successful `allocate_pages`
+            //         call, so it is a valid physical address satisfying requirement 2.
             assert_eq!(
-                allocate_pages(
-                    efi::ALLOCATE_ADDRESS,
-                    efi::BOOT_SERVICES_DATA,
-                    0x10,
-                    core::ptr::addr_of_mut!(buffer_ptr) as *mut efi::PhysicalAddress
-                ),
+                unsafe {
+                    allocate_pages(
+                        efi::ALLOCATE_ADDRESS,
+                        efi::BOOT_SERVICES_DATA,
+                        0x10,
+                        core::ptr::addr_of_mut!(buffer_ptr) as *mut efi::PhysicalAddress,
+                    )
+                },
                 efi::Status::SUCCESS
             );
             // SAFETY: `buffer_ptr` is constructed as valid by this test.
@@ -1903,37 +1983,52 @@ mod tests {
 
             //test successful allocate_max where max is greater than the address that was just freed.
             buffer_ptr = buffer_ptr.wrapping_add(0x11 * 0x1000);
+            // SAFETY: `addr_of_mut!(buffer_ptr)` is a valid, writable pointer satisfying requirement 1;
+            //         `buffer_ptr` is derived from a prior successful allocation result and is a valid
+            //         max-address hint, satisfying requirement 2.
             assert_eq!(
-                allocate_pages(
-                    efi::ALLOCATE_MAX_ADDRESS,
-                    efi::BOOT_SERVICES_DATA,
-                    0x10,
-                    core::ptr::addr_of_mut!(buffer_ptr) as *mut efi::PhysicalAddress
-                ),
+                unsafe {
+                    allocate_pages(
+                        efi::ALLOCATE_MAX_ADDRESS,
+                        efi::BOOT_SERVICES_DATA,
+                        0x10,
+                        core::ptr::addr_of_mut!(buffer_ptr) as *mut efi::PhysicalAddress,
+                    )
+                },
                 efi::Status::SUCCESS
             );
             // SAFETY: `buffer_ptr` is constructed as valid by this test.
             unsafe { free_pages(buffer_ptr as u64, 0x10) };
 
             //test invalid allocation type
+            // SAFETY: `addr_of_mut!(buffer_ptr)` is a valid, writable pointer satisfying requirement 1;
+            //         `allocate_pages` rejects the invalid allocation type before reading `memory` as
+            //         an input, so requirement 2 does not apply.
             assert_eq!(
-                allocate_pages(
-                    0x12345,
-                    efi::BOOT_SERVICES_DATA,
-                    0x10,
-                    core::ptr::addr_of_mut!(buffer_ptr) as *mut efi::PhysicalAddress
-                ),
+                unsafe {
+                    allocate_pages(
+                        0x12345,
+                        efi::BOOT_SERVICES_DATA,
+                        0x10,
+                        core::ptr::addr_of_mut!(buffer_ptr) as *mut efi::PhysicalAddress,
+                    )
+                },
                 efi::Status::INVALID_PARAMETER
             );
 
             //test creation of new allocator for OS/OEM defined allocator type.
+            // SAFETY: `addr_of_mut!(buffer_ptr)` is a valid, writable pointer to a local variable,
+            //         satisfying requirement 1; `ALLOCATE_ANY_PAGES` does not read `memory` as an
+            //         input, so requirement 2 does not apply.
             assert_eq!(
-                allocate_pages(
-                    efi::ALLOCATE_ANY_PAGES,
-                    0x71234567,
-                    0x10,
-                    core::ptr::addr_of_mut!(buffer_ptr) as *mut efi::PhysicalAddress
-                ),
+                unsafe {
+                    allocate_pages(
+                        efi::ALLOCATE_ANY_PAGES,
+                        0x71234567,
+                        0x10,
+                        core::ptr::addr_of_mut!(buffer_ptr) as *mut efi::PhysicalAddress,
+                    )
+                },
                 efi::Status::SUCCESS
             );
 
@@ -1947,23 +2042,33 @@ mod tests {
             assert_eq!(AllocatorMap::handle_for_memory_type(0x71234567).unwrap(), handle);
 
             //test that creation of new allocator for illegal type fails.
+            // SAFETY: `addr_of_mut!(buffer_ptr)` is a valid, writable pointer satisfying requirement 1;
+            //         `allocate_pages` rejects the disallowed memory type before reading `memory` as
+            //         an input, so requirement 2 does not apply.
             assert_eq!(
-                allocate_pages(
-                    efi::ALLOCATE_ANY_PAGES,
-                    efi::PERSISTENT_MEMORY,
-                    0x10,
-                    core::ptr::addr_of_mut!(buffer_ptr) as *mut efi::PhysicalAddress
-                ),
+                unsafe {
+                    allocate_pages(
+                        efi::ALLOCATE_ANY_PAGES,
+                        efi::PERSISTENT_MEMORY,
+                        0x10,
+                        core::ptr::addr_of_mut!(buffer_ptr) as *mut efi::PhysicalAddress,
+                    )
+                },
                 efi::Status::INVALID_PARAMETER
             );
 
+            // SAFETY: `addr_of_mut!(buffer_ptr)` is a valid, writable pointer to a local variable,
+            //         satisfying requirement 1; `ALLOCATE_ANY_PAGES` does not read `memory` as an
+            //         input, so requirement 2 does not apply.
             assert_eq!(
-                allocate_pages(
-                    efi::ALLOCATE_ANY_PAGES,
-                    efi::UNUSABLE_MEMORY,
-                    0x10,
-                    core::ptr::addr_of_mut!(buffer_ptr) as *mut efi::PhysicalAddress
-                ),
+                unsafe {
+                    allocate_pages(
+                        efi::ALLOCATE_ANY_PAGES,
+                        efi::UNUSABLE_MEMORY,
+                        0x10,
+                        core::ptr::addr_of_mut!(buffer_ptr) as *mut efi::PhysicalAddress,
+                    )
+                },
                 efi::Status::SUCCESS
             );
         })
@@ -1987,14 +2092,16 @@ mod tests {
     fn copy_mem_should_copy_mem() {
         let mut dest = vec![0xa5u8; 0x10];
         let mut src = vec![0x5au8; 0x10];
-        copy_mem(dest.as_mut_ptr() as *mut c_void, src.as_mut_ptr() as *mut c_void, 0x10);
+        // SAFETY: Both `dest` and `src` are valid 0x10-byte heap allocations and 0x10 bytes are copied.
+        unsafe { copy_mem(dest.as_mut_ptr() as *mut c_void, src.as_mut_ptr() as *mut c_void, 0x10) };
         assert_eq!(dest, src);
     }
 
     #[test]
     fn set_mem_should_set_mem() {
         let mut dest = vec![0xa5u8; 0x10];
-        set_mem(dest.as_mut_ptr() as *mut c_void, 0x10, 0x00);
+        // SAFETY: `dest` is a valid 0x10-byte heap allocation and 0x10 bytes are set.
+        unsafe { set_mem(dest.as_mut_ptr() as *mut c_void, 0x10, 0x00) };
         assert_eq!(dest, vec![0x00u8; 0x10]);
     }
 
@@ -2006,25 +2113,35 @@ mod tests {
 
             // allocate some "custom" type pages to create something interesting to find in the map.
             let mut buffer_ptr: *mut u8 = core::ptr::null_mut();
+            // SAFETY: `addr_of_mut!(buffer_ptr)` is a valid, writable pointer to a local variable,
+            //         satisfying requirement 1; `ALLOCATE_ANY_PAGES` does not read `memory` as an
+            //         input, so requirement 2 does not apply.
             assert_eq!(
-                allocate_pages(
-                    efi::ALLOCATE_ANY_PAGES,
-                    0x71234567,
-                    0x10,
-                    core::ptr::addr_of_mut!(buffer_ptr) as *mut efi::PhysicalAddress
-                ),
+                unsafe {
+                    allocate_pages(
+                        efi::ALLOCATE_ANY_PAGES,
+                        0x71234567,
+                        0x10,
+                        core::ptr::addr_of_mut!(buffer_ptr) as *mut efi::PhysicalAddress,
+                    )
+                },
                 efi::Status::SUCCESS
             );
 
             // allocate some "runtime" type pages to create something interesting to find in the map.
             let mut runtime_buffer_ptr: *mut u8 = core::ptr::null_mut();
+            // SAFETY: `addr_of_mut!(runtime_buffer_ptr)` is a valid, writable pointer to a local
+            //         variable, satisfying requirement 1; `ALLOCATE_ANY_PAGES` does not read `memory`
+            //         as an input, so requirement 2 does not apply.
             assert_eq!(
-                allocate_pages(
-                    efi::ALLOCATE_ANY_PAGES,
-                    efi::RUNTIME_SERVICES_DATA,
-                    0x10,
-                    core::ptr::addr_of_mut!(runtime_buffer_ptr) as *mut efi::PhysicalAddress
-                ),
+                unsafe {
+                    allocate_pages(
+                        efi::ALLOCATE_ANY_PAGES,
+                        efi::RUNTIME_SERVICES_DATA,
+                        0x10,
+                        core::ptr::addr_of_mut!(runtime_buffer_ptr) as *mut efi::PhysicalAddress,
+                    )
+                },
                 efi::Status::SUCCESS
             );
 
@@ -2032,13 +2149,18 @@ mod tests {
             let mut map_key = 0;
             let mut descriptor_size = 0;
             let mut version = 0;
-            let status = get_memory_map(
-                core::ptr::addr_of_mut!(memory_map_size),
-                core::ptr::null_mut(),
-                core::ptr::addr_of_mut!(map_key),
-                core::ptr::addr_of_mut!(descriptor_size),
-                core::ptr::addr_of_mut!(version),
-            );
+            // SAFETY: all non-null pointers are `addr_of_mut!` of local variables, satisfying
+            //         requirements 1 and 3; `memory_map` is null (probing for required size), which
+            //         is allowed and the function returns `BUFFER_TOO_SMALL` before writing it.
+            let status = unsafe {
+                get_memory_map(
+                    core::ptr::addr_of_mut!(memory_map_size),
+                    core::ptr::null_mut(),
+                    core::ptr::addr_of_mut!(map_key),
+                    core::ptr::addr_of_mut!(descriptor_size),
+                    core::ptr::addr_of_mut!(version),
+                )
+            };
             assert_eq!(status, efi::Status::BUFFER_TOO_SMALL);
             assert_ne!(memory_map_size, 0);
             assert_eq!(descriptor_size, core::mem::size_of::<efi::MemoryDescriptor>());
@@ -2056,13 +2178,18 @@ mod tests {
                 memory_map_size / descriptor_size
             ];
 
-            let status = get_memory_map(
-                core::ptr::addr_of_mut!(memory_map_size),
-                memory_map_buffer.as_mut_ptr(),
-                core::ptr::addr_of_mut!(map_key),
-                core::ptr::addr_of_mut!(descriptor_size),
-                core::ptr::addr_of_mut!(version),
-            );
+            // SAFETY: `memory_map_buffer` is a valid, heap-allocated Vec with capacity for
+            //         `memory_map_size / descriptor_size` descriptors, satisfying requirement 2;
+            //         all other non-null pointers are `addr_of_mut!` of locals, satisfying reqs 1 and 3.
+            let status = unsafe {
+                get_memory_map(
+                    core::ptr::addr_of_mut!(memory_map_size),
+                    memory_map_buffer.as_mut_ptr(),
+                    core::ptr::addr_of_mut!(map_key),
+                    core::ptr::addr_of_mut!(descriptor_size),
+                    core::ptr::addr_of_mut!(version),
+                )
+            };
             assert_eq!(status, efi::Status::SUCCESS);
             assert_eq!(descriptor_size, core::mem::size_of::<efi::MemoryDescriptor>());
             assert_eq!(version, 1);
@@ -2100,13 +2227,17 @@ mod tests {
                 .expect("Failed to find runtime allocation.");
 
             //get_memory_map with null size should return invalid parameter
-            let status = get_memory_map(
-                core::ptr::null_mut(),
-                memory_map_buffer.as_mut_ptr(),
-                core::ptr::addr_of_mut!(map_key),
-                core::ptr::addr_of_mut!(descriptor_size),
-                core::ptr::addr_of_mut!(version),
-            );
+            // SAFETY: `memory_map_size` is null to test the invalid-parameter path; the function
+            //         returns `INVALID_PARAMETER` before dereferencing it, so no UB occurs.
+            let status = unsafe {
+                get_memory_map(
+                    core::ptr::null_mut(),
+                    memory_map_buffer.as_mut_ptr(),
+                    core::ptr::addr_of_mut!(map_key),
+                    core::ptr::addr_of_mut!(descriptor_size),
+                    core::ptr::addr_of_mut!(version),
+                )
+            };
             assert_eq!(status, efi::Status::INVALID_PARAMETER);
         })
     }
@@ -2116,25 +2247,35 @@ mod tests {
         with_locked_state(GcdInit::WithSize(0x1000000), |_physical_hob_list| {
             // allocate some "custom" type pages to create something interesting to find in the map.
             let mut buffer_ptr: *mut u8 = core::ptr::null_mut();
+            // SAFETY: `addr_of_mut!(buffer_ptr)` is a valid, writable pointer to a local variable,
+            //         satisfying requirement 1; `ALLOCATE_ANY_PAGES` does not read `memory` as an
+            //         input, so requirement 2 does not apply.
             assert_eq!(
-                allocate_pages(
-                    efi::ALLOCATE_ANY_PAGES,
-                    0x71234567,
-                    0x10,
-                    core::ptr::addr_of_mut!(buffer_ptr) as *mut efi::PhysicalAddress
-                ),
+                unsafe {
+                    allocate_pages(
+                        efi::ALLOCATE_ANY_PAGES,
+                        0x71234567,
+                        0x10,
+                        core::ptr::addr_of_mut!(buffer_ptr) as *mut efi::PhysicalAddress,
+                    )
+                },
                 efi::Status::SUCCESS
             );
 
             // allocate some "custom" type pages to create something interesting to find in the map.
             let mut runtime_buffer_ptr: *mut u8 = core::ptr::null_mut();
+            // SAFETY: `addr_of_mut!(runtime_buffer_ptr)` is a valid, writable pointer to a local
+            //         variable, satisfying requirement 1; `ALLOCATE_ANY_PAGES` does not read `memory`
+            //         as an input, so requirement 2 does not apply.
             assert_eq!(
-                allocate_pages(
-                    efi::ALLOCATE_ANY_PAGES,
-                    efi::RUNTIME_SERVICES_DATA,
-                    0x10,
-                    core::ptr::addr_of_mut!(runtime_buffer_ptr) as *mut efi::PhysicalAddress
-                ),
+                unsafe {
+                    allocate_pages(
+                        efi::ALLOCATE_ANY_PAGES,
+                        efi::RUNTIME_SERVICES_DATA,
+                        0x10,
+                        core::ptr::addr_of_mut!(runtime_buffer_ptr) as *mut efi::PhysicalAddress,
+                    )
+                },
                 efi::Status::SUCCESS
             );
 
@@ -2143,13 +2284,17 @@ mod tests {
             let mut map_key = 0;
             let mut descriptor_size = 0;
             let mut version = 0;
-            let status = get_memory_map(
-                core::ptr::addr_of_mut!(memory_map_size),
-                core::ptr::null_mut(),
-                core::ptr::addr_of_mut!(map_key),
-                core::ptr::addr_of_mut!(descriptor_size),
-                core::ptr::addr_of_mut!(version),
-            );
+            // SAFETY: all non-null pointers are `addr_of_mut!` of local variables, satisfying
+            //         requirements 1 and 3; `memory_map` is null (probing for required size).
+            let status = unsafe {
+                get_memory_map(
+                    core::ptr::addr_of_mut!(memory_map_size),
+                    core::ptr::null_mut(),
+                    core::ptr::addr_of_mut!(map_key),
+                    core::ptr::addr_of_mut!(descriptor_size),
+                    core::ptr::addr_of_mut!(version),
+                )
+            };
             assert_eq!(status, efi::Status::BUFFER_TOO_SMALL);
 
             let mut memory_map_buffer: Vec<efi::MemoryDescriptor> = vec![
@@ -2163,13 +2308,17 @@ mod tests {
                 memory_map_size / descriptor_size
             ];
 
-            let status = get_memory_map(
-                core::ptr::addr_of_mut!(memory_map_size),
-                memory_map_buffer.as_mut_ptr(),
-                core::ptr::addr_of_mut!(map_key),
-                core::ptr::addr_of_mut!(descriptor_size),
-                core::ptr::addr_of_mut!(version),
-            );
+            // SAFETY: `memory_map_buffer` is a valid Vec with capacity for the required descriptors,
+            //         satisfying requirement 2; all other non-null pointers are locals (reqs 1 and 3).
+            let status = unsafe {
+                get_memory_map(
+                    core::ptr::addr_of_mut!(memory_map_size),
+                    memory_map_buffer.as_mut_ptr(),
+                    core::ptr::addr_of_mut!(map_key),
+                    core::ptr::addr_of_mut!(descriptor_size),
+                    core::ptr::addr_of_mut!(version),
+                )
+            };
             assert_eq!(status, efi::Status::SUCCESS);
 
             assert!(terminate_memory_map(map_key).is_ok());
