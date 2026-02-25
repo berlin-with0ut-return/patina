@@ -346,7 +346,14 @@ pub unsafe fn core_connect_controller(
     return_status
 }
 
-extern "efiapi" fn connect_controller(
+// Connects one or more drivers to a controller.
+//
+// # Safety
+// 1. `driver_image_handle`, if non-null, must be a readable pointer to a null-terminated array of
+//    `efi::Handle` values (UEFI spec §7.3.12).
+// 2. `remaining_device_path`, if non-null, must be a readable pointer to a valid
+//    `EFI_DEVICE_PATH_PROTOCOL` structure (UEFI spec §7.3.12).
+unsafe extern "efiapi" fn connect_controller(
     handle: efi::Handle,
     driver_image_handle: *mut efi::Handle,
     remaining_device_path: *mut efi::protocols::device_path::Protocol,
@@ -358,15 +365,16 @@ extern "efiapi" fn connect_controller(
         let mut current_ptr = driver_image_handle;
         let mut handles: Vec<efi::Handle> = Vec::new();
         loop {
-            // SAFETY: caller must ensure that driver_image_handle is a valid pointer to a null-terminated list of
-            // handles if it is not null.
+            // SAFETY: `driver_image_handle` is non-null (checked above) and valid for reads per requirement #1.
             let current_val = unsafe { current_ptr.read_unaligned() };
             if current_val.is_null() {
                 break;
             }
             handles.push(current_val);
-            // SAFETY: caller guarantees a null-terminated list, so safe to advance to the next pointer as the null-terminator
-            // has just been checked above.
+            // SAFETY: per requirement #1, `driver_image_handle` points into a null-terminated
+            // array that lives within a single allocation; the current element is non-null (checked
+            // above), so the null terminator (or the next element) is at least one element further into
+            // that same allocation, meaning `current_ptr.add(1)` stays within bounds.
             current_ptr = unsafe { current_ptr.add(1) };
         }
         handles
@@ -374,7 +382,7 @@ extern "efiapi" fn connect_controller(
     // remaining_device_path is passed in and may not have proper alignment.
     let device_path = if remaining_device_path.is_null() { None } else { Some(remaining_device_path) };
 
-    // SAFETY: caller must ensure that device_path is a valid pointer to a device path structure if it is not null.
+    // SAFETY: No changes to driver bindings during this function call.
     unsafe {
         match core_connect_controller(handle, driver_handles, device_path, recursive.into()) {
             Err(err) => err.into(),
@@ -542,11 +550,9 @@ extern "efiapi" fn disconnect_controller(
 
     let driver_image_handle = NonNull::new(driver_image_handle).map(|x| x.as_ptr());
     let child_handle = NonNull::new(child_handle).map(|x| x.as_ptr());
-    // SAFETY: Caller must ensure controller_handle is valid for the duration of the call.
-    // driver_image_handle and child_handle are both created above using NonNull which should
-    // guarantee they are non-null pointers. controller_handle is validated above. We do not
-    // remove any of these handles during this call, though it is possible for a different
-    // entity at another TPL to do so.
+    // SAFETY: There is no preemptive multithreading in this environment; no other execution context
+    // can unload driver bindings between the start and end of this call, satisfying the precondition
+    // of `core_disconnect_controller`.
     unsafe {
         match core_disconnect_controller(controller_handle, driver_image_handle, child_handle) {
             Err(err) => err.into(),
@@ -1388,12 +1394,15 @@ mod tests {
 
             // Test 1: Call with single driver handle
             let mut driver_handles = vec![driver_handle1, core::ptr::null_mut()];
-            let status = connect_controller(
-                controller_handle,
-                driver_handles.as_mut_ptr(),
-                core::ptr::null_mut(), // No remaining device path
-                efi::Boolean::FALSE,
-            );
+            // SAFETY: `driver_handles` is a null-terminated array per req #1; `remaining_device_path` is null per req #2.
+            let status = unsafe {
+                connect_controller(
+                    controller_handle,
+                    driver_handles.as_mut_ptr(),
+                    core::ptr::null_mut(), // No remaining device path
+                    efi::Boolean::FALSE,
+                )
+            };
 
             assert_eq!(status, efi::Status::SUCCESS);
             assert_eq!(SUPPORTED_CALL_COUNT.load(Ordering::SeqCst), 1);
@@ -1403,12 +1412,15 @@ mod tests {
             SUPPORTED_CALL_COUNT.store(0, Ordering::SeqCst);
             START_CALL_COUNT.store(0, Ordering::SeqCst);
 
-            let status = connect_controller(
-                controller_handle,
-                core::ptr::null_mut(), // Null driver handle array
-                core::ptr::null_mut(), // No remaining device path
-                efi::Boolean::FALSE,
-            );
+            // SAFETY: both pointer params are null (optional per §7.3.12 req #1 and #2).
+            let status = unsafe {
+                connect_controller(
+                    controller_handle,
+                    core::ptr::null_mut(), // Null driver handle array
+                    core::ptr::null_mut(), // No remaining device path
+                    efi::Boolean::FALSE,
+                )
+            };
 
             assert_eq!(status, efi::Status::SUCCESS);
             // At least one support call should have happened
