@@ -60,8 +60,10 @@ impl MemoryManager for CoreMemoryManager {
             }
         };
 
-        let result =
-            core_allocate_pages(alloc_type, options.memory_type().into(), page_count, &mut address, Some(alignment));
+        // SAFETY:
+        let result = unsafe {
+            core_allocate_pages(alloc_type, options.memory_type().into(), page_count, &mut address, Some(alignment))
+        };
 
         match result {
             Ok(_) => {

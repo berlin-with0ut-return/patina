@@ -680,13 +680,15 @@ unsafe extern "efiapi" fn allocate_pages(
     pages: usize,
     memory: *mut efi::PhysicalAddress,
 ) -> efi::Status {
-    match core_allocate_pages(allocation_type, memory_type, pages, memory, None) {
+    // SAFETY: `core_allocate_pages` inherits the same safety requirements as `allocate_pages`.
+    match unsafe { core_allocate_pages(allocation_type, memory_type, pages, memory, None) } {
         Ok(_) => efi::Status::SUCCESS,
         Err(status) => status.into(),
     }
 }
 
-pub fn core_allocate_pages(
+/// See [`allocate_pages`] for definition and safety requirements.
+pub unsafe fn core_allocate_pages(
     allocation_type: efi::AllocateType,
     memory_type: efi::MemoryType,
     pages: usize,
@@ -1013,13 +1015,17 @@ fn process_hob_allocations(hob_list: &HobList) {
                         let alloc_res = match gcd_desc.memory_type {
                             // if this is system memory, we use core_allocate_pages to allocate it
                             // so that we can track the allocation in the allocator
-                            GcdMemoryType::SystemMemory => core_allocate_pages(
-                                efi::ALLOCATE_ADDRESS,
-                                desc.memory_type,
-                                uefi_size_to_pages!(desc.memory_length as usize),
-                                &mut address as *mut efi::PhysicalAddress,
-                                None,
-                            ),
+                            // SAFETY: `memory` is a valid pointer to the stack variable `address`.
+                            // The base address of the memory descriptor HOB should be a valid allocation address.
+                            GcdMemoryType::SystemMemory => unsafe {
+                                core_allocate_pages(
+                                    efi::ALLOCATE_ADDRESS,
+                                    desc.memory_type,
+                                    uefi_size_to_pages!(desc.memory_length as usize),
+                                    &mut address as *mut efi::PhysicalAddress,
+                                    None,
+                                )
+                            },
                             GcdMemoryType::NonExistent | GcdMemoryType::Unaccepted => {
                                 // we can't allocate memory in a non-existent or unaccepted memory type
                                 log::error!(
@@ -1195,15 +1201,16 @@ fn process_hob_allocations(hob_list: &HobList) {
     match GCD.get_memory_descriptor_for_address(0) {
         Ok(desc) if desc.memory_type == GcdMemoryType::SystemMemory => {
             let mut address: efi::PhysicalAddress = 0;
-            if core_allocate_pages(
-                efi::ALLOCATE_ADDRESS,
-                efi::BOOT_SERVICES_DATA,
-                1,
-                &mut address as *mut efi::PhysicalAddress,
-                None,
-            )
-            .is_err()
-            {
+            if unsafe {
+                core_allocate_pages(
+                    efi::ALLOCATE_ADDRESS,
+                    efi::BOOT_SERVICES_DATA,
+                    1,
+                    &mut address as *mut efi::PhysicalAddress,
+                    None,
+                )
+                .is_err()
+            } {
                 // if we failed, we should just continue, we will still unmap page 0, but it will be possible to
                 // allocate by another entity, which is dangerous.
                 log::warn!(

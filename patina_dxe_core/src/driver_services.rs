@@ -521,15 +521,20 @@ pub unsafe fn core_disconnect_controller(
         let mut status = efi::Status::SUCCESS;
         if !child_handles.is_empty() {
             //disconnect the child controller(s).
-            status = (driver_binding.stop)(
-                driver_binding_interface,
-                controller_handle,
-                child_handles.len(),
-                child_handles.as_mut_ptr(),
-            );
+            // TODO_UNSAFE
+            status = unsafe {
+                (driver_binding.stop)(
+                    driver_binding_interface,
+                    controller_handle,
+                    child_handles.len(),
+                    child_handles.as_mut_ptr(),
+                )
+            };
         }
         if status == efi::Status::SUCCESS && (child_handle.is_none() || is_only_child) {
-            status = (driver_binding.stop)(driver_binding_interface, controller_handle, 0, core::ptr::null_mut());
+            // TODO_UNSAFE
+            status =
+                unsafe { (driver_binding.stop)(driver_binding_interface, controller_handle, 0, core::ptr::null_mut()) };
         }
         if status == efi::Status::SUCCESS {
             one_or_more_drivers_disconnected = true;

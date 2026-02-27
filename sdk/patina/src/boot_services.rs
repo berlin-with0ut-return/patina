@@ -1004,21 +1004,21 @@ impl BootServices for StandardBootServices {
         // verified (via CRC) before use with an error returned on mismatch. Present use cases for external modification
         // of boot services don't merit such complexity at this time.
         let create_event = unsafe { efi_boot_services_fn!(*self.as_mut_ptr(), create_event) };
-        let status = create_event(
-            event_type.into(),
-            notify_tpl.into(),
-            // Safety: Transmuting function pointer types with matching ABIs and compatible signatures.
-            // Both are extern "efiapi" callbacks taking a context pointer - the generic parameter T
-            // is erased to c_void for the UEFI FFI interface.
-            unsafe {
+        let status = unsafe {
+            create_event(
+                event_type.into(),
+                notify_tpl.into(),
+                // Safety: Transmuting function pointer types with matching ABIs and compatible signatures.
+                // Both are extern "efiapi" callbacks taking a context pointer - the generic parameter T
+                // is erased to c_void for the UEFI FFI interface.
                 mem::transmute::<
                     Option<extern "efiapi" fn(*mut c_void, *mut T)>,
                     Option<unsafe extern "efiapi" fn(*mut c_void, *mut c_void)>,
-                >(notify_function)
-            },
-            notify_context as *mut c_void,
-            event.as_mut_ptr(),
-        );
+                >(notify_function),
+                notify_context as *mut c_void,
+                event.as_mut_ptr(),
+            )
+        };
         // SAFETY: If the UEFI call succeeded, event has been initialized by the firmware.
         if status.is_error() { Err(status) } else { Ok(unsafe { event.assume_init() }) }
     }
@@ -1034,22 +1034,25 @@ impl BootServices for StandardBootServices {
         let mut event = MaybeUninit::zeroed();
         // SAFETY: See safety comment in create_event_unchecked for details on corner cases around external modifications.
         let create_event_ex = unsafe { efi_boot_services_fn!(*self.as_mut_ptr(), create_event_ex) };
-        let status = create_event_ex(
-            event_type.into(),
-            notify_tpl.into(),
-            // Safety: Transmuting function pointer types with matching ABIs and compatible signatures.
-            // Both are extern "efiapi" callbacks - the generic parameter T is erased to c_void for FFI.
-            // Wrapping in Option as the UEFI interface expects an optional callback.
-            unsafe {
-                mem::transmute::<
-                    unsafe extern "efiapi" fn(*mut c_void, *mut T),
-                    Option<unsafe extern "efiapi" fn(*mut c_void, *mut c_void)>,
-                >(notify_function)
-            },
-            notify_context as *mut c_void,
-            event_group as *const _,
-            event.as_mut_ptr(),
-        );
+        // TODO_UNSAFE
+        let status = unsafe {
+            create_event_ex(
+                event_type.into(),
+                notify_tpl.into(),
+                // Safety: Transmuting function pointer types with matching ABIs and compatible signatures.
+                // Both are extern "efiapi" callbacks - the generic parameter T is erased to c_void for FFI.
+                // Wrapping in Option as the UEFI interface expects an optional callback.
+                unsafe {
+                    mem::transmute::<
+                        unsafe extern "efiapi" fn(*mut c_void, *mut T),
+                        Option<unsafe extern "efiapi" fn(*mut c_void, *mut c_void)>,
+                    >(notify_function)
+                },
+                notify_context as *mut c_void,
+                event_group as *const _,
+                event.as_mut_ptr(),
+            )
+        };
         // SAFETY: If the call succeeded, it is considered initialized.
         if status.is_error() { Err(status) } else { Ok(unsafe { event.assume_init() }) }
     }
